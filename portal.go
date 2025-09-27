@@ -2373,6 +2373,26 @@ func (portal *Portal) updateRoomTopic() {
 	}
 }
 
+type matrixCustomEmoji struct {
+	Shortcode string        `json:"shortcode"`
+	Uri       id.ContentURI `json:"uri"`
+}
+
+var customEmojisState = event.Type{Type: "dev.kuylar.unstable.room_emojis", Class: event.StateEventType}
+
+func (portal *Portal) updateRoomEmojis(emojis []matrixCustomEmoji) {
+	if portal.MXID != "" {
+		_, err := portal.MainIntent().SendStateEvent(portal.MXID, customEmojisState, "emojis", map[string]interface{}{
+			"emojis": emojis,
+		})
+		if err != nil {
+			portal.log.Err(err).Msg("Failed to update room emojis")
+		} else {
+			portal.TopicSet = true
+		}
+	}
+}
+
 func (portal *Portal) removeFromSpace() {
 	if portal.InSpace == "" {
 		return
@@ -2628,4 +2648,16 @@ func (br *DiscordBridge) HandleTombstone(evt *event.Event) {
 	portal.Update()
 	portal.log.Info().Msg("Followed tombstone and updated portal MXID")
 	portal.UpdateBridgeInfo()
+}
+
+func (br *DiscordBridge) GetDiscordReactions(guildId string, user *User) []*discordgo.Emoji {
+	if user == nil {
+		return nil
+	}
+
+	emojis, err := user.Session.GuildEmojis(guildId)
+	if err != nil {
+		return nil
+	}
+	return emojis
 }

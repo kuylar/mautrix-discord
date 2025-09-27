@@ -70,6 +70,7 @@ func (br *DiscordBridge) RegisterCommands() {
 		cmdDeleteAllPortals,
 		cmdExec,
 		cmdCommands,
+		cmdSyncEmotes,
 	)
 }
 
@@ -898,4 +899,49 @@ func fnDeleteAllPortals(ce *WrappedCommandEvent) {
 		}
 		ce.Reply("Finished background cleanup of deleted portal rooms.")
 	}()
+}
+
+var cmdSyncEmotes = &commands.FullHandler{
+	Func: wrapCommand(fnSyncEmotes),
+	Name: "sync-emotes",
+	Help: commands.HelpMeta{
+		Section:     HelpSectionPortalManagement,
+		Description: "Sync guild emojis from Discord",
+	},
+	RequiresLogin:      true,
+	RequiresEventLevel: roomModerator,
+	RequiresPortal:     true,
+}
+
+func fnSyncEmotes(ce *WrappedCommandEvent) {
+	portal := ce.Portal
+	if portal == nil {
+		ce.Reply("This command must be ran in a portal room")
+		return
+	}
+
+	var discordEmojis = portal.bridge.GetDiscordReactions(portal.GuildID, ce.User)
+	var mxIds = map[string]id.ContentURI{}
+
+	for _, emoji := range discordEmojis {
+		mxIds[emoji.Name] = portal.getEmojiMXCByDiscordID(emoji.ID, emoji.Name, emoji.Animated)
+	}
+
+	var mxEmotes []matrixCustomEmoji
+	for shortcode, uri := range mxIds {
+		mxEmotes = append(mxEmotes, matrixCustomEmoji{
+			Shortcode: shortcode,
+			Uri:       uri,
+		})
+	}
+
+	var res = ""
+
+	for _, emote := range mxEmotes {
+		res += fmt.Sprintf("- %s: %s - <img data-mx-emoticon height=\"24\" src=\"%s\" alt=\"\" title=\"Guild avatar\">\n", emote.Shortcode, emote.Uri.String(), emote.Uri.String())
+	}
+
+	ce.Portal.updateRoomEmojis(mxEmotes)
+
+	ce.ReplyAdvanced(res, true, true)
 }
