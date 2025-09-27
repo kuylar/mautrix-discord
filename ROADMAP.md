@@ -1,4 +1,8 @@
 # Features & roadmap
+
+These features have been modified from mautrix/discord package to comply with my personal interests on a Matrix-Discord bridge.
+For this reason, some features have been removed with reasons specified next to them.
+
 * Matrix → Discord
   * [ ] Message content
     * [x] Plain text
@@ -11,11 +15,7 @@
   * [x] Reactions
     * [x] Unicode emojis
     * [ ] Custom emojis (re-reacting with custom emojis sent from Discord already works)
-  * [ ] Executing Discord bot commands
-    * [x] Basic arguments and subcommands
-    * [ ] Subcommand groups
-    * [ ] Mention arguments
-    * [ ] Attachment arguments
+  * [ ] ~~Executing Discord bot commands~~ I use Mautrix/Discord with a bot account which cannot execute bot commands
   * [ ] Presence
   * [x] Typing notifications
   * [x] Own read status
@@ -68,6 +68,7 @@
   * [ ] Initial user metadata
     * [ ] Display name
     * [ ] Avatar
+  * [ ] Support for PluralKit (and maybe other related accessibility tools)
 * Misc
   * [x] Login methods
     * [x] QR scan from mobile

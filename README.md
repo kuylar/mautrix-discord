@@ -1,5 +1,5 @@
 # mautrix-discord
-A Matrix-Discord puppeting bridge based on [discordgo](https://github.com/bwmarrin/discordgo).
+A Matrix-Discord puppeting bridge based on [discordgo](https://github.com/bwmarrin/discordgo). Forked from [mautrix/discord](https://github.com/mautrix/discord) to add some features I needed. See ROADMAP.md for changes that's not in upstream
 
 ## Documentation
 All setup and usage instructions are located on [docs.mau.fi]. Some quick links:
@@ -16,4 +16,8 @@ All setup and usage instructions are located on [docs.mau.fi]. Some quick links:
 contains a general overview of what is supported by the bridge.
 
 ## Discussion
+### mautrix/discord
 Matrix room: [#discord:maunium.net](https://matrix.to/#/#discord:maunium.net)
+
+### kuylar/mautrix-discord
+Matrix room: [#discord:kuylar.dev](https://matrix.to/#/#discord:kuylar.dev)
