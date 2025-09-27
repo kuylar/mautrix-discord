@@ -70,6 +70,7 @@ func (br *DiscordBridge) RegisterCommands() {
 		cmdDeleteAllPortals,
 		cmdExec,
 		cmdCommands,
+		cmdSetPkUser,
 	)
 }
 
@@ -898,4 +899,38 @@ func fnDeleteAllPortals(ce *WrappedCommandEvent) {
 		}
 		ce.Reply("Finished background cleanup of deleted portal rooms.")
 	}()
+}
+
+var cmdSetPkUser = &commands.FullHandler{
+	Func: wrapCommand(fnSetPkUser),
+	Name: "set-pk",
+	Help: commands.HelpMeta{
+		Section:     commands.HelpSectionGeneral,
+		Description: "Toggle the replied user as a PluralKit user",
+	},
+}
+
+func fnSetPkUser(ce *WrappedCommandEvent) {
+	if ce.Event.ReplyTo == "" {
+		ce.Reply("Reply to a message to set the user as a PluralKit user")
+		return
+	}
+	repliedEvent, err := ce.Portal.getEvent(ce.Event.ReplyTo)
+	if err != nil {
+		ce.Reply("Failed to get the replied message")
+		return
+	}
+
+	puppet := ce.Bridge.GetPuppetByMXID(repliedEvent.Sender)
+	if puppet == nil {
+		ce.Reply("Failed to get puppet for the replied user")
+		return
+	}
+	message := "User set as a PluralKit user. Their messages will be delayed to avoid sending multiple message and redaction events"
+	if puppet.IsPluralKitUser {
+		message = "User set as a normal user."
+	}
+	puppet.IsPluralKitUser = !puppet.IsPluralKitUser
+	puppet.Update()
+	ce.Reply(message)
 }

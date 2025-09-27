@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/starshine-sys/pkgo/v2"
 	"regexp"
 	"strings"
 	"sync"
@@ -50,6 +51,7 @@ func (br *DiscordBridge) NewPuppet(dbPuppet *database.Puppet) *Puppet {
 	}
 }
 
+// TODO: WILL BREAK WITH PLURALKIT PUPPETS
 func (br *DiscordBridge) ParsePuppetMXID(mxid id.UserID) (string, bool) {
 	if userIDRegex == nil {
 		pattern := fmt.Sprintf(
@@ -216,6 +218,28 @@ func (puppet *Puppet) UpdateName(info *discordgo.User) bool {
 	return true
 }
 
+func (puppet *Puppet) UpdateNameWithPluralKit(member *pkgo.Member, system *pkgo.System) bool {
+	newName := puppet.bridge.Config.Bridge.FormatPluralKitDisplayname(member, system)
+	if puppet.Name == newName && puppet.NameSet {
+		return false
+	}
+	puppet.Name = newName
+	puppet.NameSet = false
+	err := puppet.DefaultIntent().SetDisplayName(newName)
+	if err != nil {
+		puppet.log.Warn().Err(err).Msg("Failed to update displayname")
+	} else {
+		go puppet.updatePortalMeta(func(portal *Portal) {
+			if portal.UpdateNameDirect(puppet.Name, false) {
+				portal.Update()
+				portal.UpdateBridgeInfo()
+			}
+		})
+		puppet.NameSet = true
+	}
+	return true
+}
+
 func (br *DiscordBridge) reuploadUserAvatar(intent *appservice.IntentAPI, guildID, userID, avatarID string) (id.ContentURI, string, error) {
 	var downloadURL string
 	if guildID == "" {
@@ -244,6 +268,20 @@ func (br *DiscordBridge) reuploadUserAvatar(intent *appservice.IntentAPI, guildI
 	return copied.MXC, downloadURL, nil
 }
 
+func (br *DiscordBridge) reuploadPluralKitAvatar(intent *appservice.IntentAPI, memberId string, downloadURL string) (id.ContentURI, string, error) {
+	url := br.DMA.AvatarMXC("PLURALKIT", memberId, downloadURL) // band-aid fix :3
+	if !url.IsEmpty() {
+		return url, downloadURL, nil
+	}
+	copied, err := br.copyAttachmentToMatrix(intent, downloadURL, false, AttachmentMeta{
+		AttachmentID: fmt.Sprintf("avatar/%s/%s/%s", "PLURALKIT", memberId, downloadURL),
+	})
+	if err != nil {
+		return id.ContentURI{}, downloadURL, err
+	}
+	return copied.MXC, downloadURL, nil
+}
+
 func (puppet *Puppet) UpdateAvatar(info *discordgo.User) bool {
 	avatarID := info.Avatar
 	if puppet.IsWebhook && !puppet.bridge.Config.Bridge.EnableWebhookAvatars {
@@ -259,6 +297,40 @@ func (puppet *Puppet) UpdateAvatar(info *discordgo.User) bool {
 
 	if puppet.Avatar != "" && (puppet.AvatarURL.IsEmpty() || avatarChanged) {
 		url, _, err := puppet.bridge.reuploadUserAvatar(puppet.DefaultIntent(), "", info.ID, puppet.Avatar)
+		if err != nil {
+			puppet.log.Warn().Err(err).Str("avatar_id", puppet.Avatar).Msg("Failed to reupload user avatar")
+			return true
+		}
+		puppet.AvatarURL = url
+	}
+
+	err := puppet.DefaultIntent().SetAvatarURL(puppet.AvatarURL)
+	if err != nil {
+		puppet.log.Warn().Err(err).Msg("Failed to update avatar")
+	} else {
+		go puppet.updatePortalMeta(func(portal *Portal) {
+			if portal.UpdateAvatarFromPuppet(puppet) {
+				portal.Update()
+				portal.UpdateBridgeInfo()
+			}
+		})
+		puppet.AvatarSet = true
+	}
+	return true
+}
+
+func (puppet *Puppet) UpdateAvatarWithPluralKit(member *pkgo.Member) bool {
+	avatarID := member.AvatarURL
+	if puppet.Avatar == avatarID && puppet.AvatarSet {
+		return false
+	}
+	avatarChanged := avatarID != puppet.Avatar
+	puppet.Avatar = avatarID
+	puppet.AvatarSet = false
+	puppet.AvatarURL = id.ContentURI{}
+
+	if puppet.Avatar != "" && (puppet.AvatarURL.IsEmpty() || avatarChanged) {
+		url, _, err := puppet.bridge.reuploadPluralKitAvatar(puppet.DefaultIntent(), member.ID, puppet.Avatar)
 		if err != nil {
 			puppet.log.Warn().Err(err).Str("avatar_id", puppet.Avatar).Msg("Failed to reupload user avatar")
 			return true
@@ -331,6 +403,42 @@ func (puppet *Puppet) UpdateInfo(source *User, info *discordgo.User, message *di
 	}
 }
 
+func (puppet *Puppet) UpdateInfoWithPluralKit(member *pkgo.Member, system *pkgo.System, message *discordgo.Message) {
+	puppet.syncLock.Lock()
+	defer puppet.syncLock.Unlock()
+
+	if member == nil || system == nil {
+		puppet.log.Error().Msg("Failed to get member/system info for PluralKit message")
+		return
+	}
+
+	err := puppet.DefaultIntent().EnsureRegistered()
+	if err != nil {
+		puppet.log.Error().Err(err).Msg("Failed to ensure registered")
+	}
+
+	changed := false
+	if message != nil {
+		if message.ApplicationID != "466378653216014359" {
+			puppet.log.Warn().
+				Str("message_id", message.ID).
+				Str("webhook_id", message.WebhookID).
+				Msg("UpdateInfoWithPluralKit called with non-PK message, not doing anything")
+			return
+		}
+		if !puppet.IsPluralKitProxy {
+			puppet.IsPluralKitProxy = true
+			changed = true
+		}
+	}
+	changed = puppet.UpdateContactInfoWithPluralKit(member) || changed
+	changed = puppet.UpdateNameWithPluralKit(member, system) || changed
+	changed = puppet.UpdateAvatarWithPluralKit(member) || changed
+	if changed {
+		puppet.Update()
+	}
+}
+
 func (puppet *Puppet) UpdateContactInfo(info *discordgo.User) bool {
 	changed := false
 	if puppet.Username != info.Username {
@@ -356,6 +464,38 @@ func (puppet *Puppet) UpdateContactInfo(info *discordgo.User) bool {
 	}
 	return false
 }
+
+func (puppet *Puppet) UpdateContactInfoWithPluralKit(member *pkgo.Member) bool {
+	changed := false
+	username := member.DisplayName
+	if username == "" {
+		username = member.Name
+	}
+	if puppet.Username != username {
+		puppet.Username = username
+		changed = true
+	}
+	if puppet.GlobalName != member.Name {
+		puppet.GlobalName = member.Name
+		changed = true
+	}
+	if puppet.Discriminator != "PK" {
+		puppet.Discriminator = "PK"
+		changed = true
+	}
+	if puppet.IsBot != false {
+		puppet.IsBot = false
+		changed = true
+	}
+	if changed || !puppet.ContactInfoSet {
+		puppet.ContactInfoSet = false
+		puppet.ResendContactInfo()
+		return true
+	}
+	return false
+}
+
+// I think this is a beeper-specific thing?
 
 func (puppet *Puppet) ResendContactInfo() {
 	if !puppet.bridge.SpecVersions.Supports(mautrix.BeeperFeatureArbitraryProfileMeta) || puppet.ContactInfoSet {
