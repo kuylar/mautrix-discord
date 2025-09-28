@@ -748,6 +748,7 @@ func getPkPuppetAndIntent(portal *Portal, user *User, msg *discordgo.Message) (*
 			return getPkPuppetAndIntent(portal, user, msg)
 		}
 		msg.Author.ID = fmt.Sprintf("pk_%s", pkMessage.Member.ID)
+		portal.handleDiscordStopTyping(pkMessage.Sender.String())
 
 		puppet := portal.bridge.GetPuppetByID(msg.Author.ID)
 		puppet.UpdateInfoWithPluralKit(pkMessage.Member, pkMessage.System, msg)
@@ -1068,6 +1069,28 @@ func (portal *Portal) handleDiscordTyping(evt *discordgo.TypingStart) {
 		return
 	}
 	_, err = intent.UserTyping(portal.MXID, true, 12*time.Second)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to send typing notification to Matrix")
+	}
+}
+
+func (portal *Portal) handleDiscordStopTyping(userId string) {
+	puppet := portal.bridge.GetPuppetByID(userId)
+	if puppet.Name == "" {
+		// Puppet hasn't been synced yet
+		return
+	}
+	log := portal.log.With().
+		Str("ghost_mxid", puppet.MXID.String()).
+		Str("action", "discord typing").
+		Logger()
+	intent := puppet.IntentFor(portal)
+	err := intent.EnsureJoined(portal.MXID)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to ensure ghost is joined for typing notification")
+		return
+	}
+	_, err = intent.UserTyping(portal.MXID, false, 12*time.Second)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to send typing notification to Matrix")
 	}
