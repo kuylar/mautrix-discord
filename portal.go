@@ -653,8 +653,8 @@ func (portal *Portal) handleDiscordMessageCreate(user *User, msg *discordgo.Mess
 		puppet, intent = getPuppetAndIntent(portal, user, msg)
 	}
 	if puppet.IsPluralKitUser && !backfill {
-		portal.log.Debug().Str("puppet_id", puppet.ID).Msg("Puppet is from a PK user, delaying message for 500 milliseconds")
-		go portal.handleDiscordMessageCreateDelay(user, msg, thread)
+		portal.log.Debug().Str("puppet_id", puppet.ID).Msg(fmt.Sprintf("Puppet is from a PK user, delaying message for %d milliseconds", puppet.bridge.Config.Bridge.PluralkitConfig.MessageDelay))
+		go portal.handleDiscordMessageCreateDelay(user, msg, thread, puppet.bridge.Config.Bridge.PluralkitConfig.MessageDelay)
 		return
 	}
 	handlingStartTime := time.Now()
@@ -724,8 +724,8 @@ func (portal *Portal) handleDiscordMessageCreate(user *User, msg *discordgo.Mess
 	}
 }
 
-func (portal *Portal) handleDiscordMessageCreateDelay(user *User, msg *discordgo.Message, thread *Thread) {
-	time.Sleep(time.Duration(500) * time.Millisecond)
+func (portal *Portal) handleDiscordMessageCreateDelay(user *User, msg *discordgo.Message, thread *Thread, delayMs int) {
+	time.Sleep(time.Duration(delayMs) * time.Millisecond)
 	if portal.recentDeletions.Contains(msg.ID) {
 		portal.log.Debug().
 			Str("message_id", msg.ID).
@@ -765,7 +765,7 @@ func getPuppetAndIntent(portal *Portal, user *User, msg *discordgo.Message) (*Pu
 	return puppet, intent
 }
 
-var hackyReplyPattern = regexp.MustCompile(`^\*\*\[Replying to]\(https://discord.com/channels/(\d+)/(\d+)/(\d+)\)`)
+var hackyReplyPattern = regexp.MustCompile(`^\*\*?\[(?:Reply(?:ing)? to:?|\(click to see attachment\))]\(https://discord.com/channels/(\d+)/(\d+)/(\d+)\)`)
 
 func isReplyEmbed(embed *discordgo.MessageEmbed) bool {
 	return hackyReplyPattern.MatchString(embed.Description)

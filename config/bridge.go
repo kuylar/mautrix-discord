@@ -98,6 +98,7 @@ type BridgeConfig struct {
 	PluralkitConfig struct {
 		DisplaynameTemplate string `yaml:"displayname_template"`
 		UsernameTemplate    string `yaml:"username_template"`
+		MessageDelay        int    `yaml:"message_delay"`
 	} `yaml:"pluralkit"`
 
 	usernameTemplate      *template.Template `yaml:"-"`
