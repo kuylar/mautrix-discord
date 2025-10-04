@@ -533,7 +533,7 @@ const BotIntents = discordgo.IntentGuilds |
 	discordgo.IntentDirectMessageTyping |
 	// Privileged intents
 	discordgo.IntentMessageContent |
-	//discordgo.IntentGuildPresences |
+	discordgo.IntentGuildPresences |
 	discordgo.IntentGuildMembers
 
 func (user *User) Connect() error {
@@ -671,6 +671,8 @@ func (user *User) eventHandler(rawEvt any) {
 		user.interactionSuccessHandler(evt)
 	case *discordgo.ThreadListSync:
 		user.threadListSyncHandler(evt)
+	case *discordgo.PresenceUpdate:
+		user.presenceUpdateHandler(evt)
 	case *discordgo.Event:
 		// Ignore
 	default:
@@ -1171,6 +1173,52 @@ func (user *User) channelRecipientRemove(c *discordgo.ChannelRecipientRemove) {
 	if portal != nil {
 		portal.syncParticipant(user, c.User, true)
 	}
+}
+
+func (user *User) presenceUpdateHandler(c *discordgo.PresenceUpdate) {
+	puppet := user.bridge.GetPuppetByID(c.User.ID)
+	presence := event.PresenceOffline
+
+	var statuses []string
+
+	if c.Status == discordgo.StatusOnline {
+		presence = event.PresenceOnline
+	} else if c.Status == discordgo.StatusDoNotDisturb {
+		presence = event.PresenceUnavailable
+	} else if c.Status == discordgo.StatusIdle {
+		presence = event.PresenceUnavailable
+	}
+
+	if len(c.ClientStatus.Web) > 0 {
+		statuses = append(statuses, fmt.Sprintf("%s on web", c.Status))
+	}
+	if len(c.ClientStatus.Mobile) > 0 {
+		statuses = append(statuses, fmt.Sprintf("%s on mobile", c.Status))
+	}
+	if len(c.ClientStatus.Desktop) > 0 {
+		statuses = append(statuses, fmt.Sprintf("%s on desktop", c.Status))
+	}
+
+	for _, activity := range c.Activities {
+		switch activity.Type {
+		case discordgo.ActivityTypeCustom:
+			statuses = append([]string{activity.State}, statuses...)
+		case discordgo.ActivityTypeGame:
+			statuses = append(statuses, fmt.Sprintf("Playing %s", activity.Name))
+		case discordgo.ActivityTypeStreaming:
+			statuses = append(statuses, fmt.Sprintf("Streaming %s", activity.Name))
+		case discordgo.ActivityTypeListening:
+			statuses = append(statuses, fmt.Sprintf("Listening to %s", activity.Name))
+		case discordgo.ActivityTypeWatching:
+			statuses = append(statuses, fmt.Sprintf("Watching %s", activity.Name))
+		case discordgo.ActivityTypeCompeting:
+			statuses = append(statuses, fmt.Sprintf("Competing in %s", activity.Name))
+		}
+	}
+
+	statusMsg := strings.Join(statuses, "\n")
+
+	puppet.UpdatePresence(presence, statusMsg)
 }
 
 func (user *User) findPortal(channelID string) (*Portal, *Thread) {

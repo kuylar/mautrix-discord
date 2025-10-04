@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"maunium.net/go/mautrix/event"
 	"regexp"
 	"strings"
 	"sync"
@@ -329,6 +330,31 @@ func (puppet *Puppet) UpdateInfo(source *User, info *discordgo.User, message *di
 	if changed {
 		puppet.Update()
 	}
+}
+
+func (puppet *Puppet) UpdatePresence(presence event.Presence, status string) {
+	puppet.syncLock.Lock()
+	defer puppet.syncLock.Unlock()
+
+	req := event.PresenceEventContent{
+		Presence:      presence,
+		StatusMessage: status,
+	}
+	u := puppet.DefaultIntent().BuildClientURL("v3", "presence", puppet.DefaultIntent().UserID, "status")
+	_, err := puppet.DefaultIntent().MakeRequest("PUT", u, req, nil)
+
+	if err != nil {
+		puppet.log.Warn().
+			Str("user_id", puppet.ID).
+			Str("access_token", puppet.AccessToken).
+			Str("presence", string(presence)).
+			Err(err).
+			Msg("Failed to update presence")
+	}
+	puppet.log.Info().
+		Str("presence", string(presence)).
+		Str("user_id", puppet.MXID.String()).
+		Msg("Updated presence")
 }
 
 func (puppet *Puppet) UpdateContactInfo(info *discordgo.User) bool {
