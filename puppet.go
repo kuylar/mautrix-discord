@@ -346,15 +346,9 @@ func (puppet *Puppet) UpdatePresence(presence event.Presence, status string) {
 	if err != nil {
 		puppet.log.Warn().
 			Str("user_id", puppet.ID).
-			Str("access_token", puppet.AccessToken).
-			Str("presence", string(presence)).
 			Err(err).
 			Msg("Failed to update presence")
 	}
-	puppet.log.Info().
-		Str("presence", string(presence)).
-		Str("user_id", puppet.MXID.String()).
-		Msg("Updated presence")
 }
 
 func (puppet *Puppet) UpdateContactInfo(info *discordgo.User) bool {
