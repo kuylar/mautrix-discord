@@ -2629,3 +2629,44 @@ func (br *DiscordBridge) HandleTombstone(evt *event.Event) {
 	portal.log.Info().Msg("Followed tombstone and updated portal MXID")
 	portal.UpdateBridgeInfo()
 }
+
+func (br *DiscordBridge) HandlePresence(evt *event.Event) {
+	content, ok := evt.Content.Parsed.(*event.PresenceEventContent)
+	if !ok {
+		return
+	}
+	user := br.GetUserByMXID(evt.Sender)
+	if user == nil {
+		return
+	}
+	data := discordgo.UpdateStatusData{
+		Status: "dnd",
+	}
+	switch content.Presence {
+	case event.PresenceOnline:
+		data.Status = "online"
+	case event.PresenceUnavailable:
+		data.Status = "idle"
+	case event.PresenceOffline:
+		data.Status = "offline"
+	default:
+		data.Status = "invisible"
+	}
+	if len(content.StatusMessage) > 0 {
+		data.Activities = []*discordgo.Activity{{
+			Name:  "Custom Status",
+			Type:  discordgo.ActivityTypeCustom,
+			State: content.StatusMessage,
+		}}
+	}
+	err := user.Session.UpdateStatusComplex(data)
+	if err != nil {
+		br.ZLog.Err(err).
+			Str("user", content.Displayname).
+			Msg("Failed to update Discord presence for user")
+		return
+	}
+	br.ZLog.Debug().
+		Str("user", content.Displayname).
+		Msg("Updated Discord presence for user")
+}

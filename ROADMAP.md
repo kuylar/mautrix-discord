@@ -16,7 +16,7 @@
     * [ ] Subcommand groups
     * [ ] Mention arguments
     * [ ] Attachment arguments
-  * [ ] Presence
+  * [x] Presence
   * [x] Typing notifications
   * [x] Own read status
   * [ ] Power level
