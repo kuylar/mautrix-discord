@@ -70,6 +70,7 @@ func (br *DiscordBridge) RegisterCommands() {
 		cmdDeleteAllPortals,
 		cmdExec,
 		cmdCommands,
+		cmdSetPkUser,
 	)
 }
 
@@ -898,4 +899,59 @@ func fnDeleteAllPortals(ce *WrappedCommandEvent) {
 		}
 		ce.Reply("Finished background cleanup of deleted portal rooms.")
 	}()
+}
+
+var cmdSetPkUser = &commands.FullHandler{
+	Func: wrapCommand(fnSetPkUser),
+	Name: "set-pk",
+	Help: commands.HelpMeta{
+		Section:     commands.HelpSectionGeneral,
+		Description: "Toggle the replied user as a PluralKit user",
+	},
+}
+
+func fnSetPkUser(ce *WrappedCommandEvent) {
+	var userMxId id.UserID
+	evt, err := ce.Portal.getEvent(ce.EventID)
+	if err != nil {
+		ce.Reply("Failed to get the event. huh?")
+		return
+	}
+
+	content, ok := evt.Content.Parsed.(*event.MessageEventContent)
+	if !ok {
+		ce.Reply(fmt.Sprintf("unsupported event type %s / %T", evt.Type.String(), evt.Content.Parsed))
+		return
+	}
+	if len(content.Mentions.UserIDs) > 0 {
+		userMxId = content.Mentions.UserIDs[0]
+	}
+
+	if userMxId == "" && ce.Event.ReplyTo == "" {
+		ce.Reply("Reply to a message or ping someone as an argument to set the user as a PluralKit user")
+		return
+	}
+
+	if userMxId == "" {
+		repliedEvent, err := ce.Portal.getEvent(ce.Event.ReplyTo)
+		if err != nil {
+			ce.Reply("Failed to get the replied message")
+			return
+		} else {
+			userMxId = repliedEvent.Sender
+		}
+	}
+
+	puppet := ce.Bridge.GetPuppetByMXID(userMxId)
+	if puppet == nil {
+		ce.Reply("Failed to get puppet for the replied user")
+		return
+	}
+	message := "User set as a PluralKit user. Their messages will be delayed to avoid sending multiple message and redaction events"
+	if puppet.IsPluralKitUser {
+		message = "User set as a normal user."
+	}
+	puppet.IsPluralKitUser = !puppet.IsPluralKitUser
+	puppet.Update()
+	ce.Reply(message)
 }

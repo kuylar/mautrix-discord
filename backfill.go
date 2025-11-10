@@ -209,7 +209,7 @@ func (portal *Portal) sendBackfillBatch(log zerolog.Logger, source *User, messag
 	} else {
 		log.Debug().Msg("Not using hungryserv, sending messages one by one")
 		for _, msg := range messages {
-			portal.handleDiscordMessageCreate(source, msg, thread)
+			portal.handleDiscordMessageCreate(source, msg, thread, true)
 		}
 	}
 }

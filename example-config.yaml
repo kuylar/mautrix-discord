@@ -367,6 +367,28 @@ bridge:
         "example.com": user
         "@admin:example.com": admin
 
+    # PluralKit support & config
+    pluralkit:
+        # Localpart template of MXIDs for PluralKit users.
+        # {{.}} is replaced with the internal 5-6 char PluralKit member ID
+        username_template: discord_{{.}}
+        # Displayname template for PluralKit users.
+        # Available variables:
+        #   .ID - 5-6 character member ID
+        #   .UUID - Internal member UUID
+        #   .Name - Name of the member
+        #   .DisplayName - Display name of the member
+        #   .Pronouns - Pronouns of the member
+        #   .SystemID - System ID
+        #   .SystemName - System Name
+        displayname_template: '{{or .DisplayName .Name}}{{if .Pronouns}} ({{.Pronouns}}){{end}} {{if .SystemTag}}{{.SystemTag}}{{else}} | {{or .SystemName .SystemID}}{{end}} (PK)'
+        # Amount of milliseconds to delay the message of PK users.
+        # If the user is currently proxying, this shouldn't affect anything
+        # If the user isn't proxying, their message will appear with n ms delay
+        # This is done to avoid creating & redacting events for proxied messages
+        message_delay: 5000
+
+
 # Logging config. See https://github.com/tulir/zeroconfig for details.
 logging:
     min_level: debug

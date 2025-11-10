@@ -24,6 +24,7 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog"
+	"github.com/starshine-sys/pkgo/v2"
 	"go.mau.fi/util/exsync"
 	"go.mau.fi/util/variationselector"
 	"maunium.net/go/mautrix"
@@ -68,7 +69,8 @@ type Portal struct {
 	discordMessages chan portalDiscordMessage
 	matrixMessages  chan portalMatrixMessage
 
-	recentMessages *exsync.RingBuffer[string, *discordgo.Message]
+	recentMessages  *exsync.RingBuffer[string, *discordgo.Message]
+	recentDeletions *exsync.RingBuffer[string, bool] // bad idea, idk how to do key-only ringbuffers
 
 	commands     map[string]*discordgo.ApplicationCommand
 	commandsLock sync.RWMutex
@@ -80,6 +82,8 @@ type Portal struct {
 }
 
 const recentMessageBufferSize = 32
+
+var pkSession = pkgo.New("")
 
 var _ bridge.Portal = (*Portal)(nil)
 var _ bridge.ReadReceiptHandlingPortal = (*Portal)(nil)
@@ -266,7 +270,8 @@ func (br *DiscordBridge) NewPortal(dbPortal *database.Portal) *Portal {
 		discordMessages: make(chan portalDiscordMessage, br.Config.Bridge.PortalMessageBuffer),
 		matrixMessages:  make(chan portalMatrixMessage, br.Config.Bridge.PortalMessageBuffer),
 
-		recentMessages: exsync.NewRingBuffer[string, *discordgo.Message](recentMessageBufferSize),
+		recentMessages:  exsync.NewRingBuffer[string, *discordgo.Message](recentMessageBufferSize),
+		recentDeletions: exsync.NewRingBuffer[string, bool](recentMessageBufferSize * 2),
 
 		commands: make(map[string]*discordgo.ApplicationCommand),
 	}
@@ -583,7 +588,7 @@ func (portal *Portal) handleDiscordMessages(msg portalDiscordMessage) {
 
 	switch convertedMsg := msg.msg.(type) {
 	case *discordgo.MessageCreate:
-		portal.handleDiscordMessageCreate(msg.user, convertedMsg.Message, msg.thread)
+		portal.handleDiscordMessageCreate(msg.user, convertedMsg.Message, msg.thread, false)
 	case *discordgo.MessageUpdate:
 		portal.handleDiscordMessageUpdate(msg.user, convertedMsg.Message)
 	case *discordgo.MessageDelete:
@@ -617,7 +622,7 @@ func (portal *Portal) markMessageHandled(discordID string, authorID string, time
 	return msg
 }
 
-func (portal *Portal) handleDiscordMessageCreate(user *User, msg *discordgo.Message, thread *Thread) {
+func (portal *Portal) handleDiscordMessageCreate(user *User, msg *discordgo.Message, thread *Thread, backfill bool) {
 	switch msg.Type {
 	case discordgo.MessageTypeChannelNameChange, discordgo.MessageTypeChannelIconChange, discordgo.MessageTypeChannelPinnedMessage:
 		// These are handled via channel updates
@@ -640,10 +645,19 @@ func (portal *Portal) handleDiscordMessageCreate(user *User, msg *discordgo.Mess
 		return
 	}
 
+	var puppet *Puppet
+	var intent *appservice.IntentAPI
+	if !backfill {
+		puppet, intent = getPkPuppetAndIntent(portal, user, msg)
+	} else {
+		puppet, intent = getPuppetAndIntent(portal, user, msg)
+	}
+	if puppet.IsPluralKitUser && !backfill {
+		portal.log.Debug().Str("puppet_id", puppet.ID).Msg(fmt.Sprintf("Puppet is from a PK user, delaying message for %d milliseconds", puppet.bridge.Config.Bridge.PluralkitConfig.MessageDelay))
+		go portal.handleDiscordMessageCreateDelay(user, msg, thread, puppet.bridge.Config.Bridge.PluralkitConfig.MessageDelay)
+		return
+	}
 	handlingStartTime := time.Now()
-	puppet := portal.bridge.GetPuppetByID(msg.Author.ID)
-	puppet.UpdateInfo(user, msg.Author, msg)
-	intent := puppet.IntentFor(portal)
 
 	var discordThreadID string
 	var threadRootEvent, lastThreadEvent id.EventID
@@ -710,7 +724,49 @@ func (portal *Portal) handleDiscordMessageCreate(user *User, msg *discordgo.Mess
 	}
 }
 
-var hackyReplyPattern = regexp.MustCompile(`^\*\*\[Replying to]\(https://discord.com/channels/(\d+)/(\d+)/(\d+)\)`)
+func (portal *Portal) handleDiscordMessageCreateDelay(user *User, msg *discordgo.Message, thread *Thread, delayMs int) {
+	time.Sleep(time.Duration(delayMs) * time.Millisecond)
+	if portal.recentDeletions.Contains(msg.ID) {
+		portal.log.Debug().
+			Str("message_id", msg.ID).
+			Str("channel_id", msg.ChannelID).
+			Msg("Delayed message was deleted during the delay, not sending a Matrix event")
+		return
+	}
+	portal.handleDiscordMessageCreate(user, msg, thread, true)
+}
+
+func getPkPuppetAndIntent(portal *Portal, user *User, msg *discordgo.Message) (*Puppet, *appservice.IntentAPI) {
+	if msg.ApplicationID == "466378653216014359" {
+		messageId, err := pkgo.ParseSnowflake(msg.ID)
+		if err != nil {
+
+			return getPkPuppetAndIntent(portal, user, msg)
+		}
+		pkMessage, err := pkSession.Message(messageId)
+		if err != nil {
+			return getPkPuppetAndIntent(portal, user, msg)
+		}
+		msg.Author.ID = fmt.Sprintf("pk_%s", pkMessage.Member.ID)
+		portal.handleDiscordStopTyping(pkMessage.Sender.String())
+
+		puppet := portal.bridge.GetPuppetByID(msg.Author.ID)
+		puppet.UpdateInfoWithPluralKit(pkMessage.Member, pkMessage.System, msg)
+		intent := puppet.IntentFor(portal)
+		return puppet, intent
+	}
+
+	return getPuppetAndIntent(portal, user, msg)
+}
+
+func getPuppetAndIntent(portal *Portal, user *User, msg *discordgo.Message) (*Puppet, *appservice.IntentAPI) {
+	puppet := portal.bridge.GetPuppetByID(msg.Author.ID)
+	puppet.UpdateInfo(user, msg.Author, msg)
+	intent := puppet.IntentFor(portal)
+	return puppet, intent
+}
+
+var hackyReplyPattern = regexp.MustCompile(`^\*\*?\[(?:Reply(?:ing)? to:?|\(click to see attachment\))]\(https://discord.com/channels/(\d+)/(\d+)/(\d+)\)`)
 
 func isReplyEmbed(embed *discordgo.MessageEmbed) bool {
 	return hackyReplyPattern.MatchString(embed.Description)
@@ -979,6 +1035,7 @@ func (portal *Portal) handleDiscordMessageDeleteBulk(user *User, messages []stri
 }
 
 func (portal *Portal) redactAllParts(intent *appservice.IntentAPI, msgID string) (lastResp id.EventID) {
+	portal.recentDeletions.Push(msgID, true)
 	existing := portal.bridge.DB.Message.GetByDiscordID(portal.Key, msgID)
 	for _, dbMsg := range existing {
 		resp, err := intent.RedactEvent(portal.MXID, dbMsg.MXID)
@@ -1012,6 +1069,28 @@ func (portal *Portal) handleDiscordTyping(evt *discordgo.TypingStart) {
 		return
 	}
 	_, err = intent.UserTyping(portal.MXID, true, 12*time.Second)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to send typing notification to Matrix")
+	}
+}
+
+func (portal *Portal) handleDiscordStopTyping(userId string) {
+	puppet := portal.bridge.GetPuppetByID(userId)
+	if puppet.Name == "" {
+		// Puppet hasn't been synced yet
+		return
+	}
+	log := portal.log.With().
+		Str("ghost_mxid", puppet.MXID.String()).
+		Str("action", "discord typing").
+		Logger()
+	intent := puppet.IntentFor(portal)
+	err := intent.EnsureJoined(portal.MXID)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to ensure ghost is joined for typing notification")
+		return
+	}
+	_, err = intent.UserTyping(portal.MXID, false, 12*time.Second)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to send typing notification to Matrix")
 	}
