@@ -671,6 +671,8 @@ func (user *User) eventHandler(rawEvt any) {
 		user.interactionSuccessHandler(evt)
 	case *discordgo.ThreadListSync:
 		user.threadListSyncHandler(evt)
+	case *discordgo.GuildEmojisUpdate:
+		user.guildEmojisUpdateHandler(evt)
 	case *discordgo.Event:
 		// Ignore
 	default:
@@ -1244,6 +1246,36 @@ func (user *User) pushPortalMessage(msg interface{}, typeName, channelID, guildI
 			Str("channel_id", channelID).
 			Msg("Portal message buffer is full")
 		portal.discordMessages <- wrappedMsg
+	}
+}
+
+func (user *User) guildEmojisUpdateHandler(evt *discordgo.GuildEmojisUpdate) {
+	portals := user.bridge.GetAllPortalsInGuild(evt.GuildID)
+	if len(portals) == 0 {
+		return
+	}
+
+	var discordEmojis = evt.Emojis
+	var mxIds = map[string]id.ContentURI{}
+
+	for _, emoji := range discordEmojis {
+		mxIds[emoji.Name] = portals[0].getEmojiMXCByDiscordID(emoji.ID, emoji.Name, emoji.Animated)
+	}
+
+	// TODO: Remove old emojis
+
+	mxEmotes := make(map[string]matrixCustomEmoji)
+	for shortcode, uri := range mxIds {
+		mxEmotes[shortcode] = matrixCustomEmoji{
+			Uri:   uri,
+			Usage: []string{"emoticon"},
+		}
+	}
+
+	for _, portal := range portals {
+		if portal.HasEmoticons {
+			portal.updateRoomEmojis(mxEmotes)
+		}
 	}
 }
 

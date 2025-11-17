@@ -1,16 +1,16 @@
 # Features & roadmap
 * Matrix → Discord
-  * [ ] Message content
+  * [x] Message content
     * [x] Plain text
     * [x] Formatted messages
     * [x] Media/files
     * [x] Replies
     * [x] Threads
-    * [ ] Custom emojis
+    * [x] Custom emojis ([MSC2545](https://github.com/matrix-org/matrix-spec-proposals/pull/2545))
   * [x] Message redactions
   * [x] Reactions
     * [x] Unicode emojis
-    * [ ] Custom emojis (re-reacting with custom emojis sent from Discord already works)
+    * [x] Custom emojis
   * [ ] Executing Discord bot commands
     * [x] Basic arguments and subcommands
     * [ ] Subcommand groups

@@ -240,6 +240,26 @@ var matrixHTMLParser = &format.HTMLParser{
 }
 
 func (portal *Portal) parseMatrixHTML(content *event.MessageEventContent, allowedLinkPreviews []string) (string, *discordgo.MessageAllowedMentions) {
+	// Convert Matrix emojis to Discord emojis with Regex
+	// Thanks to https://stackoverflow.com/a/1732454
+
+	if len(content.FormattedBody) > 0 {
+		var re = regexp.MustCompile(`(<img[^>]+data-mx-emoticon[^>]+>)`)
+		content.FormattedBody = re.ReplaceAllStringFunc(content.FormattedBody, func(s string) string {
+			var srcRe = regexp.MustCompile(`src="(.+?)"`)
+			var emojiID = srcRe.FindStringSubmatch(s)
+			if len(emojiID) == 0 {
+				return ""
+			}
+			uri, _ := id.ParseContentURI(emojiID[1])
+			emojiFile := portal.bridge.DB.File.GetEmojiByMXC(uri)
+			if emojiFile != nil {
+				return fmt.Sprintf("%%lt;:%s:%s%%gt;", emojiFile.EmojiName, emojiFile.ID)
+			}
+			return s
+		})
+	}
+
 	allowedMentions := &discordgo.MessageAllowedMentions{
 		Parse:       []discordgo.AllowedMentionType{},
 		Users:       []string{},
@@ -253,7 +273,9 @@ func (portal *Portal) parseMatrixHTML(content *event.MessageEventContent, allowe
 		if content.Mentions != nil {
 			ctx.ReturnData[formatterContextInputAllowedMentionsKey] = content.Mentions.UserIDs
 		}
-		return variationselector.FullyQualify(matrixHTMLParser.Parse(content.FormattedBody, ctx)), allowedMentions
+		s := matrixHTMLParser.Parse(content.FormattedBody, ctx)
+		s = strings.ReplaceAll(strings.ReplaceAll(s, "%lt;", "<"), "%gt;", ">")
+		return variationselector.FullyQualify(s), allowedMentions
 	} else {
 		return variationselector.FullyQualify(escapeDiscordMarkdown(content.Body)), allowedMentions
 	}

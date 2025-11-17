@@ -14,7 +14,7 @@ const (
 	portalSelect = `
 		SELECT dcid, receiver, type, other_user_id, dc_guild_id, dc_parent_id, mxid,
 		       plain_name, name, name_set, friend_nick, topic, topic_set, avatar, avatar_url, avatar_set,
-		       encrypted, in_space, first_event_id, relay_webhook_id, relay_webhook_secret
+		       encrypted, in_space, first_event_id, relay_webhook_id, relay_webhook_secret, has_emoticons
 		FROM portal
 	`
 )
@@ -127,6 +127,7 @@ type Portal struct {
 
 	RelayWebhookID     string
 	RelayWebhookSecret string
+	HasEmoticons       bool
 }
 
 func (p *Portal) Scan(row dbutil.Scannable) *Portal {
@@ -136,7 +137,7 @@ func (p *Portal) Scan(row dbutil.Scannable) *Portal {
 
 	err := row.Scan(&p.Key.ChannelID, &p.Key.Receiver, &chanType, &otherUserID, &guildID, &parentID,
 		&mxid, &p.PlainName, &p.Name, &p.NameSet, &p.FriendNick, &p.Topic, &p.TopicSet, &p.Avatar, &avatarURL, &p.AvatarSet,
-		&p.Encrypted, &p.InSpace, &firstEventID, &relayWebhookID, &relayWebhookSecret)
+		&p.Encrypted, &p.InSpace, &firstEventID, &relayWebhookID, &relayWebhookSecret, &p.HasEmoticons)
 
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -184,14 +185,14 @@ func (p *Portal) Update() {
 		SET type=$1, other_user_id=$2, dc_guild_id=$3, dc_parent_id=$4, mxid=$5,
 			plain_name=$6, name=$7, name_set=$8, friend_nick=$9, topic=$10, topic_set=$11,
 			avatar=$12, avatar_url=$13, avatar_set=$14, encrypted=$15, in_space=$16, first_event_id=$17,
-			relay_webhook_id=$18, relay_webhook_secret=$19
-		WHERE dcid=$20 AND receiver=$21
+			relay_webhook_id=$18, relay_webhook_secret=$19, has_emoticons=$20
+		WHERE dcid=$21 AND receiver=$22
 	`
 	_, err := p.db.Exec(query,
 		p.Type, strPtr(p.OtherUserID), strPtr(p.GuildID), strPtr(p.ParentID), strPtr(string(p.MXID)),
 		p.PlainName, p.Name, p.NameSet, p.FriendNick, p.Topic, p.TopicSet,
 		p.Avatar, p.AvatarURL.String(), p.AvatarSet, p.Encrypted, p.InSpace, p.FirstEventID.String(),
-		strPtr(p.RelayWebhookID), strPtr(p.RelayWebhookSecret),
+		strPtr(p.RelayWebhookID), strPtr(p.RelayWebhookSecret), p.HasEmoticons,
 		p.Key.ChannelID, p.Key.Receiver)
 
 	if err != nil {

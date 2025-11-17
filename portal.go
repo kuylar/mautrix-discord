@@ -2374,16 +2374,21 @@ func (portal *Portal) updateRoomTopic() {
 }
 
 type matrixCustomEmoji struct {
-	Shortcode string        `json:"shortcode"`
-	Uri       id.ContentURI `json:"uri"`
+	Uri   id.ContentURI `json:"url"`
+	Usage []string      `json:"usage"`
 }
 
-var customEmojisState = event.Type{Type: "dev.kuylar.unstable.room_emojis", Class: event.StateEventType}
+var customEmojisState = event.Type{Type: "im.ponies.room_emotes", Class: event.StateEventType}
 
-func (portal *Portal) updateRoomEmojis(emojis []matrixCustomEmoji) {
+func (portal *Portal) updateRoomEmojis(emojis map[string]matrixCustomEmoji) {
 	if portal.MXID != "" {
-		_, err := portal.MainIntent().SendStateEvent(portal.MXID, customEmojisState, "emojis", map[string]interface{}{
-			"emojis": emojis,
+		_, err := portal.MainIntent().SendStateEvent(portal.MXID, customEmojisState, "discord_guild_emojis", map[string]interface{}{
+			"images": emojis,
+			"pack": map[string]interface{}{
+				"usage":        []string{"emoticon"},
+				"display_name": portal.Guild.Name,
+				"attribution":  "Automatically created by the bridge from guild",
+			},
 		})
 		if err != nil {
 			portal.log.Err(err).Msg("Failed to update room emojis")
