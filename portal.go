@@ -24,6 +24,7 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/starshine-sys/pkgo/v2"
 	"go.mau.fi/util/exsync"
 	"go.mau.fi/util/variationselector"
@@ -740,15 +741,25 @@ func getPkPuppetAndIntent(portal *Portal, user *User, msg *discordgo.Message) (*
 	if msg.ApplicationID == "466378653216014359" {
 		messageId, err := pkgo.ParseSnowflake(msg.ID)
 		if err != nil {
-
-			return getPkPuppetAndIntent(portal, user, msg)
+			return getPuppetAndIntent(portal, user, msg)
 		}
 		pkMessage, err := pkSession.Message(messageId)
 		if err != nil {
-			return getPkPuppetAndIntent(portal, user, msg)
+			return getPuppetAndIntent(portal, user, msg)
 		}
 		msg.Author.ID = fmt.Sprintf("pk_%s", pkMessage.Member.ID)
-		portal.handleDiscordStopTyping(pkMessage.Sender.String())
+		senderPuppet := portal.bridge.GetPuppetByID(pkMessage.Sender.String())
+		portal.handleDiscordStopTyping(senderPuppet.ID)
+		if !senderPuppet.IsPluralKitUser {
+			senderPuppet.IsPluralKitUser = true
+			_, err := portal.sendMatrixMessage(portal.MainIntent(), event.EventMessage, &event.MessageEventContent{
+				Body:    fmt.Sprintf("User %s was automatically marked as a PluralKit user. Use the set-pk command to reverse this.", senderPuppet.Name),
+				MsgType: event.MsgNotice,
+			}, nil, time.Now().UnixMilli())
+			if err != nil {
+				log.Err(err).Msg("Failed to notify auto PluralKit setting")
+			}
+		}
 
 		puppet := portal.bridge.GetPuppetByID(msg.Author.ID)
 		puppet.UpdateInfoWithPluralKit(pkMessage.Member, pkMessage.System, msg)
