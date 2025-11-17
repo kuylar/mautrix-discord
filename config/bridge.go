@@ -19,6 +19,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/starshine-sys/pkgo/v2"
 	"strings"
 	"text/template"
 
@@ -94,10 +95,18 @@ type BridgeConfig struct {
 
 	Permissions bridgeconfig.PermissionConfig `yaml:"permissions"`
 
-	usernameTemplate    *template.Template `yaml:"-"`
-	displaynameTemplate *template.Template `yaml:"-"`
-	channelNameTemplate *template.Template `yaml:"-"`
-	guildNameTemplate   *template.Template `yaml:"-"`
+	PluralkitConfig struct {
+		DisplaynameTemplate string `yaml:"displayname_template"`
+		UsernameTemplate    string `yaml:"username_template"`
+		MessageDelay        int    `yaml:"message_delay"`
+	} `yaml:"pluralkit"`
+
+	usernameTemplate      *template.Template `yaml:"-"`
+	displaynameTemplate   *template.Template `yaml:"-"`
+	channelNameTemplate   *template.Template `yaml:"-"`
+	guildNameTemplate     *template.Template `yaml:"-"`
+	pkUsernameTemplate    *template.Template `yaml:"-"`
+	pkDisplaynameTemplate *template.Template `yaml:"-"`
 }
 
 type DirectMedia struct {
@@ -170,6 +179,14 @@ func (bc *BridgeConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err != nil {
 		return err
 	}
+	bc.pkUsernameTemplate, err = template.New("pk_username").Parse(bc.PluralkitConfig.UsernameTemplate)
+	if err != nil {
+		return err
+	}
+	bc.pkDisplaynameTemplate, err = template.New("pk_displayname").Parse(bc.PluralkitConfig.DisplaynameTemplate)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -235,5 +252,29 @@ type GuildNameParams struct {
 func (bc BridgeConfig) FormatGuildName(params GuildNameParams) string {
 	var buffer strings.Builder
 	_ = bc.guildNameTemplate.Execute(&buffer, params)
+	return buffer.String()
+}
+
+func (bc BridgeConfig) FormatPluralKitUsername(userID string) string {
+	var buffer strings.Builder
+	_ = bc.pkUsernameTemplate.Execute(&buffer, userID)
+	return buffer.String()
+}
+
+type PluralKitDisplaynameParams struct {
+	*pkgo.Member
+	SystemID   string
+	SystemName string
+	SystemTag  string
+}
+
+func (bc BridgeConfig) FormatPluralKitDisplayname(member *pkgo.Member, system *pkgo.System) string {
+	var buffer strings.Builder
+	_ = bc.pkDisplaynameTemplate.Execute(&buffer, &PluralKitDisplaynameParams{
+		Member:     member,
+		SystemID:   system.ID,
+		SystemName: system.Name,
+		SystemTag:  system.Tag,
+	})
 	return buffer.String()
 }

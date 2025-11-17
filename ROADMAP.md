@@ -16,7 +16,7 @@
     * [ ] Subcommand groups
     * [ ] Mention arguments
     * [ ] Attachment arguments
-  * [ ] Presence
+  * [x] Presence
   * [x] Typing notifications
   * [x] Own read status
   * [ ] Power level
@@ -48,7 +48,7 @@
     * [x] Unicode emojis
     * [x] Custom emojis ([MSC4027](https://github.com/matrix-org/matrix-spec-proposals/pull/4027))
   * [x] Avatars
-  * [ ] Presence
+  * [x] Presence
   * [ ] Typing notifications (currently partial support: DMs work after you type in them)
   * [x] Own read status
   * [ ] Role permissions
