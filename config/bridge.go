@@ -19,9 +19,10 @@ package config
 import (
 	"errors"
 	"fmt"
-	"github.com/starshine-sys/pkgo/v2"
 	"strings"
 	"text/template"
+
+	"github.com/starshine-sys/pkgo/v2"
 
 	"github.com/bwmarrin/discordgo"
 
@@ -100,6 +101,7 @@ type BridgeConfig struct {
 		UsernameTemplate    string `yaml:"username_template"`
 		MessageDelay        int    `yaml:"message_delay"`
 	} `yaml:"pluralkit"`
+	TenorProxy string `yaml:"tenor_proxy"`
 
 	usernameTemplate      *template.Template `yaml:"-"`
 	displaynameTemplate   *template.Template `yaml:"-"`

@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"html"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -274,14 +275,47 @@ func (portal *Portal) convertDiscordVideoEmbed(ctx context.Context, intent *apps
 	}
 }
 
+var tenorGifPattern = regexp.MustCompile(`https://tenor\.com/view/.+?-(\d+)`)
+
+func (portal *Portal) handleTenor(url string) *ConvertedMessage {
+	attachmentID := fmt.Sprintf("gif_%s", url)
+	match := tenorGifPattern.FindStringSubmatch(url)
+	mxc := fmt.Sprintf("mxc://%s/%s", portal.bridge.Config.Bridge.TenorProxy, match[1])
+	uri, _ := id.ParseContentURI(mxc)
+	content := &event.MessageEventContent{
+		Body:     "tenor.gif",
+		URL:      uri.CUString(),
+		MsgType:  event.MsgImage,
+		FileName: "tenor.gif",
+		Info: &event.FileInfo{
+			MimeType: "image/gif",
+			Width:    256,
+			Height:   256,
+		},
+	}
+	extra := map[string]any{}
+	return &ConvertedMessage{
+		AttachmentID: attachmentID,
+		Type:         event.EventMessage,
+		Content:      content,
+		Extra:        extra,
+	}
+}
+
 func (portal *Portal) convertDiscordMessage(ctx context.Context, puppet *Puppet, intent *appservice.IntentAPI, msg *discordgo.Message) []*ConvertedMessage {
 	predictedLength := len(msg.Attachments) + len(msg.StickerItems)
 	if msg.Content != "" {
 		predictedLength++
 	}
 	parts := make([]*ConvertedMessage, 0, predictedLength)
-	if textPart := portal.convertDiscordTextMessage(ctx, intent, msg); textPart != nil {
-		parts = append(parts, textPart)
+	if isPlainGifMessage(msg) {
+		if textPart := portal.handleTenor(msg.Content); textPart != nil {
+			parts = append(parts, textPart)
+		}
+	} else {
+		if textPart := portal.convertDiscordTextMessage(ctx, intent, msg); textPart != nil {
+			parts = append(parts, textPart)
+		}
 	}
 	log := zerolog.Ctx(ctx)
 	handledIDs := make(map[string]struct{})
@@ -312,6 +346,10 @@ func (portal *Portal) convertDiscordMessage(ctx context.Context, puppet *Puppet,
 		}
 		// Discord deduplicates embeds by URL. It makes things easier for us too.
 		if _, handled := handledIDs[embed.URL]; handled {
+			continue
+		}
+		// Ignore Tenor GIFs, those are handled above
+		if tenorGifPattern.MatchString(embed.URL) {
 			continue
 		}
 		handledIDs[embed.URL] = struct{}{}

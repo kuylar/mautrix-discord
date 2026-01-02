@@ -388,6 +388,8 @@ bridge:
         # This is done to avoid creating & redacting events for proxied messages
         message_delay: 5000
 
+    tenor_proxy: "tenor.kuylar.dev"
+
 
 # Logging config. See https://github.com/tulir/zeroconfig for details.
 logging:

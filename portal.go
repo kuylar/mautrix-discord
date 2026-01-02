@@ -979,7 +979,7 @@ func (portal *Portal) handleDiscordMessageUpdate(user *User, msg *discordgo.Mess
 	// Slightly hacky special case: messages with gif links will get an embed with the gif.
 	// The link isn't rendered on Discord, so just edit the link message into a gif message on Matrix too.
 	if isPlainGifMessage(msg) {
-		converted = portal.convertDiscordVideoEmbed(ctx, intent, msg.Embeds[0])
+		converted = portal.handleTenor(msg.Embeds[0].URL)
 	} else {
 		converted = portal.convertDiscordTextMessage(ctx, intent, msg)
 	}
@@ -2744,7 +2744,6 @@ func (br *DiscordBridge) HandleTombstone(evt *event.Event) {
 	portal.log.Info().Msg("Followed tombstone and updated portal MXID")
 	portal.UpdateBridgeInfo()
 }
-
 
 func (br *DiscordBridge) GetDiscordReactions(guildId string, user *User) []*discordgo.Emoji {
 	if user == nil {
