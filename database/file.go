@@ -24,6 +24,11 @@ const (
 		INSERT INTO discord_file (url, encrypted, mxc, id, emoji_name, size, width, height, mime_type, decryption_info, timestamp)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
+	fileUpdate = `
+		UPDATE discord_file
+		SET mxc=$1, id=$2, emoji_name=$3, size=$4, width=$5, height=$6, mime_type=$7, decryption_info=$8, timestamp=$9
+		WHERE url=$10 AND encrypted=$11
+	`
 )
 
 func (fq *FileQuery) New() *File {
@@ -133,6 +138,28 @@ func (f *File) Delete() {
 	_, err := f.db.Exec("DELETE FROM discord_file WHERE url=$1 AND encrypted=$2", f.URL, f.Encrypted)
 	if err != nil {
 		f.log.Warnfln("Failed to delete copied file %v: %v", f.MXC, err)
+		panic(err)
+	}
+}
+
+func (f *File) Update() {
+	var decryptionInfoStr sql.NullString
+	if f.DecryptionInfo != nil {
+		decryptionInfo, err := json.Marshal(f.DecryptionInfo)
+		if err != nil {
+			f.log.Warnfln("Failed to marshal decryption info of %v: %v", f.MXC, err)
+			panic(err)
+		}
+		decryptionInfoStr.Valid = true
+		decryptionInfoStr.String = string(decryptionInfo)
+	}
+	_, err := f.db.Exec(fileUpdate,
+		f.MXC.String(), strPtr(f.ID), strPtr(f.EmojiName), f.Size,
+		positiveIntToNullInt32(f.Width), positiveIntToNullInt32(f.Height), f.MimeType,
+		decryptionInfoStr, f.Timestamp.UnixMilli(), f.URL, f.Encrypted,
+	)
+	if err != nil {
+		f.log.Warnfln("Failed to update copied file %v: %v", f.MXC, err)
 		panic(err)
 	}
 }

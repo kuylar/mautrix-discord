@@ -71,6 +71,7 @@ func (br *DiscordBridge) RegisterCommands() {
 		cmdExec,
 		cmdCommands,
 		cmdSyncEmotes,
+		cmdListEmotes,
 		cmdSetPkUser,
 	)
 }
@@ -945,10 +946,48 @@ func fnSyncEmotes(ce *WrappedCommandEvent) {
 	var res = ""
 
 	for shortcode, emote := range mxEmotes {
-		res += fmt.Sprintf("- %s: %s - <img data-mx-emoticon height=\"24\" src=\"%s\" alt=\"\" title=\"%s\">\n", shortcode, emote.Uri.String(), emote.Uri.String(), shortcode)
+		res += fmt.Sprintf("- %s: <img data-mx-emoticon height=\"24\" src=\"%s\" alt=\"\" title=\"%s\">\n", shortcode, emote.Uri.String(), shortcode)
 	}
 	res += "\nAny future emoticons should be automatically bridged"
 	ce.Portal.updateRoomEmojis(mxEmotes)
+
+	ce.ReplyAdvanced(res, true, true)
+}
+
+var cmdListEmotes = &commands.FullHandler{
+	Func: wrapCommand(fnListEmotes),
+	Name: "list-emotes",
+	Help: commands.HelpMeta{
+		Section:     HelpSectionPortalManagement,
+		Description: "List emojis from the database",
+	},
+	RequiresLogin:      true,
+	RequiresEventLevel: roomModerator,
+	RequiresPortal:     true,
+}
+
+func fnListEmotes(ce *WrappedCommandEvent) {
+	portal := ce.Portal
+	if portal == nil {
+		ce.Reply("This command must be ran in a portal room")
+		return
+	}
+
+	var discordEmojis = portal.bridge.GetDiscordReactions(portal.GuildID, ce.User)
+
+	mxEmotes := make(map[string]matrixCustomEmoji)
+	for _, emoji := range discordEmojis {
+		mxEmotes[emoji.Name] = matrixCustomEmoji{
+			Uri:   portal.getEmojiMXCByDiscordID(emoji.ID, emoji.Name, emoji.Animated),
+			Usage: []string{"emoticon"},
+		}
+	}
+
+	var res = ""
+
+	for shortcode, emote := range mxEmotes {
+		res += fmt.Sprintf("- %s: <img data-mx-emoticon height=\"24\" src=\"%s\" alt=\"\" title=\"%s\">\n", shortcode, emote.Uri.String(), shortcode)
+	}
 
 	ce.ReplyAdvanced(res, true, true)
 }

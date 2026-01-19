@@ -323,6 +323,14 @@ func (br *DiscordBridge) copyAttachmentToMatrix(intent *appservice.IntentAPI, ur
 			br.attachmentTransfers.Delete(transferKey)
 			return
 		})
+	} else {
+		// Update emoji names, or else our emoji handler code breaks and sends the
+		// old emoji name, causing the Discord clients to not render the emoji
+		if meta.EmojiName != "" && returnDBFile.EmojiName != meta.EmojiName {
+			returnDBFile.EmojiName = meta.EmojiName
+			returnDBFile.Update()
+		}
+		return
 	}
 	return
 }

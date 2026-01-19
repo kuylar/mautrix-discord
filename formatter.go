@@ -254,7 +254,7 @@ func (portal *Portal) parseMatrixHTML(content *event.MessageEventContent, allowe
 			uri, _ := id.ParseContentURI(emojiID[1])
 			emojiFile := portal.bridge.DB.File.GetEmojiByMXC(uri)
 			if emojiFile != nil {
-				return fmt.Sprintf("%%lt;:%s:%s%%gt;", emojiFile.EmojiName, emojiFile.ID)
+				return fmt.Sprintf("%%lt;:%s:%s%%gt;", strings.Trim(emojiFile.EmojiName, ":"), emojiFile.ID)
 			}
 			return s
 		})
