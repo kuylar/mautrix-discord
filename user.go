@@ -1179,6 +1179,9 @@ func (user *User) channelRecipientRemove(c *discordgo.ChannelRecipientRemove) {
 
 func (user *User) presenceUpdateHandler(c *discordgo.PresenceUpdate) {
 	puppet := user.bridge.GetPuppetByID(c.User.ID)
+	if !puppet.bridge.Config.Bridge.EnableDiscordPresenceBridging {
+		return
+	}
 	presence := event.PresenceOffline
 
 	var statuses []string
