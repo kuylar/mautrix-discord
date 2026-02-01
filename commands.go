@@ -72,6 +72,8 @@ func (br *DiscordBridge) RegisterCommands() {
 		cmdCommands,
 		cmdSyncEmotes,
 		cmdListEmotes,
+		cmdDiffEmotes,
+		cmdSyncAppEmotes,
 		cmdSetPkUser,
 	)
 }
@@ -397,7 +399,7 @@ var cmdSetRelay = &commands.FullHandler{
 	Help: commands.HelpMeta{
 		Section:     HelpSectionPortalManagement,
 		Description: "Create or set a relay webhook for a portal",
-		Args:        "[room ID] <​--url URL> OR <​--create [name]>",
+		Args:        "[room ID] <​--url URL> OR <​--create [Shortcode]>",
 	},
 	RequiresLogin:      true,
 	RequiresEventLevel: roomModerator,
@@ -405,7 +407,7 @@ var cmdSetRelay = &commands.FullHandler{
 
 const webhookURLFormat = "https://discord.com/api/webhooks/%d/%s"
 
-const selectRelayHelp = "Usage: `$cmdprefix [room ID] <​--url URL> OR <​--create [name]>`"
+const selectRelayHelp = "Usage: `$cmdprefix [room ID] <​--url URL> OR <​--create [Shortcode]>`"
 
 func fnSetRelay(ce *WrappedCommandEvent) {
 	portal := ce.Portal
@@ -987,6 +989,154 @@ func fnListEmotes(ce *WrappedCommandEvent) {
 
 	for shortcode, emote := range mxEmotes {
 		res += fmt.Sprintf("- %s: <img data-mx-emoticon height=\"24\" src=\"%s\" alt=\"\" title=\"%s\">\n", shortcode, emote.Uri.String(), shortcode)
+	}
+
+	ce.ReplyAdvanced(res, true, true)
+}
+
+var cmdDiffEmotes = &commands.FullHandler{
+	Func: wrapCommand(fnDiffEmotes),
+	Name: "diff-emotes",
+	Help: commands.HelpMeta{
+		Section:     HelpSectionPortalManagement,
+		Description: "Creates a difference table between your account emojis & discord bot emojis",
+	},
+	RequiresLogin:      true,
+	RequiresEventLevel: roomModerator,
+	RequiresPortal:     false,
+}
+
+func fnDiffEmotes(ce *WrappedCommandEvent) {
+	puppet := ce.User.GetIDoublePuppet()
+	if puppet == nil {
+		ce.Reply("Double puppeting is disabled!")
+		return
+	}
+
+	if !strings.HasPrefix(ce.User.DiscordToken, "Bot") {
+		ce.Reply("This command is only available for bot accounts")
+		return
+	}
+
+	userEmotes := matrixCustomImagePack{}
+	err := puppet.CustomIntent().GetAccountData("im.ponies.user_emotes", &userEmotes)
+	if err != nil {
+		ce.Reply("❌ " + err.Error())
+		return
+	}
+
+	var diff = ce.Bridge.DiffDiscordApplicationEmojis(ce.User.DiscordID, userEmotes, ce.User)
+
+	var res = "<table><thead><tr><td>Name</td><td>Image</td><td>Discord</td><td>Matrix</td></tr></thead><tbody>"
+
+	for _, emote := range diff {
+		discordIcon := "❌"
+		matrixIcon := "❌"
+		if emote.Discord {
+			discordIcon = "✅"
+		}
+		if emote.Matrix {
+			matrixIcon = "✅"
+		}
+		res += fmt.Sprintf("<tr><td>%s</td><td><img data-mx-emoticon height=\"24\" src=\"%s\" alt=\"\" title=\"%s\"></td><td>%s</td><td>%s</td></tr>", emote.Shortcode, emote.Uri, emote.Shortcode, discordIcon, matrixIcon)
+	}
+
+	res += "</tbody></table>"
+	ce.ReplyAdvanced(res, true, true)
+}
+
+var cmdSyncAppEmotes = &commands.FullHandler{
+	Func: wrapCommand(fnSyncAppEmotes),
+	Name: "sync-app-emotes",
+	Help: commands.HelpMeta{
+		Section:     HelpSectionPortalManagement,
+		Description: "Synchronizes your account emojis with the Discord app emojis",
+	},
+	RequiresLogin:      true,
+	RequiresEventLevel: roomModerator,
+	RequiresPortal:     false,
+}
+
+func fnSyncAppEmotes(ce *WrappedCommandEvent) {
+	puppet := ce.User.GetIDoublePuppet()
+	if puppet == nil {
+		ce.Reply("Double puppeting is disabled!")
+		return
+	}
+
+	if !strings.HasPrefix(ce.User.DiscordToken, "Bot") {
+		ce.Reply("This command is only available for bot accounts")
+		return
+	}
+
+	dryRun := len(ce.Args) > 0 && ce.Args[0] == "--dry-run"
+
+	userEmotes := matrixCustomImagePack{}
+	err := puppet.CustomIntent().GetAccountData("im.ponies.user_emotes", &userEmotes)
+	if err != nil {
+		ce.Reply("❌ " + err.Error())
+		return
+	}
+
+	var diff = ce.Bridge.DiffDiscordApplicationEmojis(ce.User.DiscordID, userEmotes, ce.User)
+	var res = ""
+
+	if dryRun {
+		res = "Dry run"
+	} else {
+		res = "Synchronized emotes"
+	}
+
+	actions := 0
+	for _, emote := range diff {
+		if !emote.Matrix {
+			actions++
+			if dryRun {
+				res += fmt.Sprintf("\n- Will add <img data-mx-emoticon height=\"24\" src=\"%s\" alt=\"\" title=\"%s\"> to your account", emote.Uri.String(), emote.Shortcode)
+			} else {
+				userEmotes.Images[emote.Shortcode] = matrixCustomEmoji{
+					Uri:   emote.Uri,
+					Usage: []string{"emoticon"},
+				}
+				res += fmt.Sprintf("\n- Added <img data-mx-emoticon height=\"24\" src=\"%s\" alt=\"\" title=\"%s\"> to your account", emote.Uri.String(), emote.Shortcode)
+			}
+		}
+		if !emote.Discord {
+			actions++
+			if dryRun {
+				res += fmt.Sprintf("\n- Will upload <img data-mx-emoticon height=\"24\" src=\"%s\" alt=\"\" title=\"%s\"> to Discord", emote.Uri.String(), emote.Shortcode)
+			} else {
+				imageBytes, err := ce.Bot.DownloadBytes(emote.Uri)
+				if err != nil {
+					res += fmt.Sprintf("\n- Failed to get the data for <img data-mx-emoticon height=\"24\" src=\"%s\" alt=\"\" title=\"%s\"> while uploading to Discord", emote.Uri.String(), emote.Shortcode)
+					return
+				}
+				params := discordgo.EmojiParams{
+					Name:  emote.Shortcode,
+					Image: "data:application/octet-stream;base64," + base64.StdEncoding.EncodeToString(imageBytes),
+					Roles: nil,
+				}
+				_, err = ce.User.Session.ApplicationEmojiCreate(ce.User.DiscordID, &params)
+				if err != nil {
+					res += fmt.Sprintf("\n- Failed to upload <img data-mx-emoticon height=\"24\" src=\"%s\" alt=\"\" title=\"%s\"> to Discord: %s", emote.Uri.String(), emote.Shortcode, err.Error())
+				} else {
+					res += fmt.Sprintf("\n- Uploaded <img data-mx-emoticon height=\"24\" src=\"%s\" alt=\"\" title=\"%s\"> to Discord", emote.Uri.String(), emote.Shortcode)
+				}
+			}
+		}
+	}
+
+	if dryRun {
+		res += "\n\nNo action has been performed yet"
+	} else {
+		err := puppet.CustomIntent().SetAccountData("im.ponies.user_emotes", &userEmotes)
+		if err != nil {
+			res += "\n- Failed to save your account data"
+		}
+	}
+
+	if actions == 0 {
+		res = "There's nothing to do"
 	}
 
 	ce.ReplyAdvanced(res, true, true)

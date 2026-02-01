@@ -294,7 +294,7 @@ func (portal *Portal) convertMessageBatch(log zerolog.Logger, source *User, mess
 			mentions = &event.Mentions{}
 
 			partName := part.AttachmentID
-			// Always use blank part name for first part so that replies and other things
+			// Always use blank part Shortcode for first part so that replies and other things
 			// can reference it without knowing about attachments.
 			if i == 0 {
 				partName = ""

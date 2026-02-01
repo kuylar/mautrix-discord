@@ -435,7 +435,7 @@ func (puppet *Puppet) addWebhookMeta(part *ConvertedMessage, msg *discordgo.Mess
 	}
 	part.Extra["fi.mau.discord.webhook_metadata"] = map[string]any{
 		"id":         msg.WebhookID,
-		"name":       msg.Author.Username,
+		"Shortcode":  msg.Author.Username,
 		"avatar_id":  msg.Author.Avatar,
 		"avatar_url": msg.Author.AvatarURL(""),
 		"avatar_mxc": avatarURL.String(),

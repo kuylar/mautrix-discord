@@ -437,7 +437,7 @@ func (p *ProvisioningAPI) reconnect(w http.ResponseWriter, r *http.Request) {
 
 type guildEntry struct {
 	ID           string        `json:"id"`
-	Name         string        `json:"name"`
+	Name         string        `json:"Shortcode"`
 	AvatarURL    id.ContentURI `json:"avatar_url"`
 	MXID         id.RoomID     `json:"mxid"`
 	AutoBridge   bool          `json:"auto_bridge_channels"`

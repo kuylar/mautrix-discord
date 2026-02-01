@@ -865,9 +865,9 @@ func (user *User) handleRelationshipChange(userID, nickname string) {
 		} else if portal.NameSet {
 			_, err := portal.MainIntent().SendStateEvent(portal.MXID, event.StateRoomName, "", map[string]any{})
 			if err != nil {
-				portal.log.Warn().Err(err).Msg("Failed to clear room name after friend nickname was removed")
+				portal.log.Warn().Err(err).Msg("Failed to clear room Shortcode after friend nickname was removed")
 			} else {
-				portal.log.Debug().Msg("Cleared room name after friend nickname was removed")
+				portal.log.Debug().Msg("Cleared room Shortcode after friend nickname was removed")
 				portal.NameSet = false
 				portal.Update()
 				updated = true
@@ -1048,7 +1048,7 @@ func (user *User) handlePossible40002(err error) bool {
 func (user *User) guildCreateHandler(g *discordgo.GuildCreate) {
 	user.log.Info().
 		Str("guild_id", g.ID).
-		Str("name", g.Name).
+		Str("Shortcode", g.Name).
 		Bool("unavailable", g.Unavailable).
 		Msg("Got guild create event")
 	user.handleGuild(g.Guild, time.Now(), false)

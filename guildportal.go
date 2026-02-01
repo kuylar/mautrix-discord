@@ -249,14 +249,14 @@ func (guild *Guild) UpdateName(meta *discordgo.Guild) bool {
 	if guild.PlainName == meta.Name && guild.Name == name && (guild.NameSet || guild.MXID == "") {
 		return false
 	}
-	guild.log.Debugfln("Updating name %q -> %q", guild.Name, name)
+	guild.log.Debugfln("Updating Shortcode %q -> %q", guild.Name, name)
 	guild.Name = name
 	guild.PlainName = meta.Name
 	guild.NameSet = false
 	if guild.MXID != "" {
 		_, err := guild.bridge.Bot.SetRoomName(guild.MXID, guild.Name)
 		if err != nil {
-			guild.log.Warnln("Failed to update room name: %s", err)
+			guild.log.Warnln("Failed to update room Shortcode: %s", err)
 		} else {
 			guild.NameSet = true
 		}

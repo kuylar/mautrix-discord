@@ -325,7 +325,7 @@ func (br *DiscordBridge) copyAttachmentToMatrix(intent *appservice.IntentAPI, ur
 		})
 	} else {
 		// Update emoji names, or else our emoji handler code breaks and sends the
-		// old emoji name, causing the Discord clients to not render the emoji
+		// old emoji Shortcode, causing the Discord clients to not render the emoji
 		emojiName := strings.Trim(meta.EmojiName, ":")
 		if emojiName != "" && returnDBFile.EmojiName != emojiName {
 			returnDBFile.EmojiName = emojiName
@@ -356,6 +356,31 @@ func (portal *Portal) getEmojiMXCByDiscordID(emojiID, name string, animated bool
 	})
 	if err != nil {
 		portal.log.Warn().Err(err).Str("emoji_id", emojiID).Msg("Failed to copy emoji to Matrix")
+		return id.ContentURI{}
+	}
+	return dbFile.MXC
+}
+
+func (br *DiscordBridge) getEmojiMXCByDiscordID(emojiID, name string, animated bool) id.ContentURI {
+	mxc := br.DMA.EmojiMXC(emojiID, name, animated)
+	if !mxc.IsEmpty() {
+		return mxc
+	}
+	var url, mimeType string
+	if animated {
+		url = discordgo.EndpointEmojiAnimated(emojiID)
+		mimeType = "image/gif"
+	} else {
+		url = discordgo.EndpointEmoji(emojiID)
+		mimeType = "image/png"
+	}
+	dbFile, err := br.copyAttachmentToMatrix(br.Bot, url, false, AttachmentMeta{
+		AttachmentID: emojiID,
+		MimeType:     mimeType,
+		EmojiName:    name,
+	})
+	if err != nil {
+		br.ZLog.Warn().Err(err).Str("emoji_id", emojiID).Msg("Failed to copy emoji to Matrix")
 		return id.ContentURI{}
 	}
 	return dbFile.MXC

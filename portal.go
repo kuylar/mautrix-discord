@@ -2154,9 +2154,9 @@ func (portal *Portal) handleDiscordReaction(user *User, reaction *discordgo.Mess
 	extraContent := map[string]any{}
 	if reaction.Emoji.ID != "" {
 		extraContent["fi.mau.discord.reaction"] = map[string]any{
-			"id":   reaction.Emoji.ID,
-			"name": reaction.Emoji.Name,
-			"mxc":  matrixReaction,
+			"id":        reaction.Emoji.ID,
+			"Shortcode": reaction.Emoji.Name,
+			"mxc":       matrixReaction,
 		}
 		wrappedShortcode := fmt.Sprintf(":%s:", reaction.Emoji.Name)
 		extraContent["com.beeper.reaction.shortcode"] = wrappedShortcode
@@ -2367,7 +2367,7 @@ func (portal *Portal) UpdateNameDirect(name string, isFriendNick bool) bool {
 	portal.log.Debug().
 		Str("old_name", portal.Name).
 		Str("new_name", name).
-		Msg("Updating portal name")
+		Msg("Updating portal Shortcode")
 	portal.Name = name
 	portal.NameSet = false
 	portal.updateRoomName()
@@ -2378,7 +2378,7 @@ func (portal *Portal) updateRoomName() {
 	if portal.MXID != "" && (portal.shouldSetDMRoomMetadata() || portal.FriendNick) {
 		_, err := portal.MainIntent().SetRoomName(portal.MXID, portal.Name)
 		if err != nil {
-			portal.log.Err(err).Msg("Failed to update room name")
+			portal.log.Err(err).Msg("Failed to update room Shortcode")
 		} else {
 			portal.NameSet = true
 		}
@@ -2463,9 +2463,23 @@ func (portal *Portal) updateRoomTopic() {
 	}
 }
 
+type matrixCustomImagePack struct {
+	Pack   matrixCustomImagePackInfo    `json:"pack"`
+	Images map[string]matrixCustomEmoji `json:"images"`
+}
+
+type matrixCustomImagePackInfo struct {
+	DisplayName string   `json:"display_name"`
+	AvatarUrl   string   `json:"avatar_url"`
+	Usage       []string `json:"usage"`
+	Attribution string   `json:"attribution"`
+}
+
 type matrixCustomEmoji struct {
-	Uri   id.ContentURI `json:"url"`
-	Usage []string      `json:"usage"`
+	Uri   id.ContentURI  `json:"url"`
+	Usage []string       `json:"usage"`
+	Body  string         `json:"body"`
+	Info  event.FileInfo `json:"info"`
 }
 
 var customEmojisState = event.Type{Type: "im.ponies.room_emotes", Class: event.StateEventType}
@@ -2755,6 +2769,83 @@ func (br *DiscordBridge) GetDiscordReactions(guildId string, user *User) []*disc
 		return nil
 	}
 	return emojis
+}
+
+func (br *DiscordBridge) GetDiscordApplicationEmojis(appId string, user *User) []*discordgo.Emoji {
+	if user == nil {
+		return nil
+	}
+
+	emojis, err := user.Session.ApplicationEmojis(appId)
+	if err != nil {
+		return nil
+	}
+	return emojis
+}
+
+type emojiDiffState struct {
+	Shortcode string
+	Uri       id.ContentURI
+	Discord   bool
+	Matrix    bool
+	Info      event.FileInfo
+}
+
+func (br *DiscordBridge) DiffDiscordApplicationEmojis(appId string, userPack matrixCustomImagePack, user *User) map[string]emojiDiffState {
+	if user == nil {
+		return nil
+	}
+
+	emojis, err := user.Session.ApplicationEmojis(appId)
+	if err != nil {
+		return nil
+	}
+	allEmojis := map[string]emojiDiffState{}
+
+	for _, emoji := range emojis {
+		mxc := br.getEmojiMXCByDiscordID(emoji.ID, emoji.Name, emoji.Animated)
+		val, ok := allEmojis[emoji.Name]
+		if ok {
+			allEmojis[emoji.Name] = emojiDiffState{
+				Shortcode: emoji.Name,
+				Uri:       mxc,
+				Discord:   true,
+				Matrix:    val.Matrix,
+			}
+		} else {
+			allEmojis[emoji.Name] = emojiDiffState{
+				Shortcode: emoji.Name,
+				Uri:       mxc,
+				Discord:   true,
+				Matrix:    false,
+			}
+		}
+	}
+	for shortcode, image := range userPack.Images {
+		if len(image.Usage) > 0 && !slices.Contains(image.Usage, "emoticon") {
+			// Not an emoji, most likely a sticker. Skip
+			continue
+		}
+		val, ok := allEmojis[shortcode]
+		if ok {
+			allEmojis[shortcode] = emojiDiffState{
+				Shortcode: shortcode,
+				Uri:       image.Uri,
+				Discord:   val.Discord,
+				Matrix:    true,
+				Info:      image.Info,
+			}
+		} else {
+			allEmojis[shortcode] = emojiDiffState{
+				Shortcode: shortcode,
+				Uri:       image.Uri,
+				Discord:   false,
+				Matrix:    true,
+				Info:      image.Info,
+			}
+		}
+	}
+	return allEmojis
 }
 
 func (br *DiscordBridge) HandlePresence(evt *event.Event) {
