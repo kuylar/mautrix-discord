@@ -653,7 +653,7 @@ func (portal *Portal) handleDiscordMessageCreate(user *User, msg *discordgo.Mess
 	} else {
 		puppet, intent = getPuppetAndIntent(portal, user, msg)
 	}
-	if puppet.IsPluralKitUser && !backfill {
+	if puppet.PluralState == "pk:user" && !backfill {
 		portal.log.Debug().Str("puppet_id", puppet.ID).Msg(fmt.Sprintf("Puppet is from a PK user, delaying message for %d milliseconds", puppet.bridge.Config.Bridge.PluralkitConfig.MessageDelay))
 		go portal.handleDiscordMessageCreateDelay(user, msg, thread, puppet.bridge.Config.Bridge.PluralkitConfig.MessageDelay)
 		return
@@ -750,8 +750,8 @@ func getPkPuppetAndIntent(portal *Portal, user *User, msg *discordgo.Message) (*
 		msg.Author.ID = fmt.Sprintf("pk_%s", pkMessage.Member.ID)
 		senderPuppet := portal.bridge.GetPuppetByID(pkMessage.Sender.String())
 		portal.handleDiscordStopTyping(senderPuppet.ID)
-		if !senderPuppet.IsPluralKitUser {
-			senderPuppet.IsPluralKitUser = true
+		if senderPuppet.PluralState != "pk:user" {
+			senderPuppet.PluralState = "pk:user"
 			_, err := portal.sendMatrixMessage(portal.MainIntent(), event.EventMessage, &event.MessageEventContent{
 				Body:    fmt.Sprintf("User %s was automatically marked as a PluralKit user. Use the set-pk command to reverse this.", senderPuppet.Name),
 				MsgType: event.MsgNotice,

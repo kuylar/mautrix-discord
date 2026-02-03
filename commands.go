@@ -1188,11 +1188,14 @@ func fnSetPkUser(ce *WrappedCommandEvent) {
 		ce.Reply("Failed to get puppet for the replied user")
 		return
 	}
-	message := "User set as a PluralKit user. Their messages will be delayed to avoid sending multiple message and redaction events"
-	if puppet.IsPluralKitUser {
+	var message string
+	if puppet.PluralState == "pk:user" {
+		puppet.PluralState = "single"
 		message = "User set as a normal user."
+	} else {
+		puppet.PluralState = "pk:user"
+		message = "User set as a PluralKit user. Their messages will be delayed to avoid sending multiple message and redaction events"
 	}
-	puppet.IsPluralKitUser = !puppet.IsPluralKitUser
 	puppet.Update()
 	ce.Reply(message)
 }

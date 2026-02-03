@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"maunium.net/go/mautrix/event"
-	"github.com/starshine-sys/pkgo/v2"
 	"regexp"
 	"strings"
 	"sync"
+
+	"github.com/starshine-sys/pkgo/v2"
+	"maunium.net/go/mautrix/event"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/rs/zerolog"
@@ -446,8 +447,8 @@ func (puppet *Puppet) UpdateInfoWithPluralKit(member *pkgo.Member, system *pkgo.
 				Msg("UpdateInfoWithPluralKit called with non-PK message, not doing anything")
 			return
 		}
-		if !puppet.IsPluralKitProxy {
-			puppet.IsPluralKitProxy = true
+		if strings.HasPrefix(puppet.PluralState, "pk:proxy") {
+			puppet.PluralState = "pk:proxy"
 			changed = true
 		}
 	}
