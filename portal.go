@@ -26,6 +26,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/starshine-sys/pkgo/v2"
+	"go.mau.fi/mautrix-discord/plural"
 	"go.mau.fi/util/exsync"
 	"go.mau.fi/util/variationselector"
 	"maunium.net/go/mautrix"
@@ -84,8 +85,6 @@ type Portal struct {
 
 const recentMessageBufferSize = 32
 
-var pkSession = pkgo.New("")
-
 var _ bridge.Portal = (*Portal)(nil)
 var _ bridge.ReadReceiptHandlingPortal = (*Portal)(nil)
 var _ bridge.MembershipHandlingPortal = (*Portal)(nil)
@@ -110,7 +109,8 @@ func (portal *Portal) ReceiveMatrixEvent(user bridge.User, evt *event.Event) {
 }
 
 var (
-	portalCreationDummyEvent = event.Type{Type: "fi.mau.dummy.portal_created", Class: event.MessageEventType}
+	portalCreationDummyEvent               = event.Type{Type: "fi.mau.dummy.portal_created", Class: event.MessageEventType}
+	pkSession                *pkgo.Session = nil
 )
 
 func (br *DiscordBridge) loadPortal(dbPortal *database.Portal, key *database.PortalKey, chanType discordgo.ChannelType) *Portal {
@@ -123,6 +123,10 @@ func (br *DiscordBridge) loadPortal(dbPortal *database.Portal, key *database.Por
 		dbPortal.Key = *key
 		dbPortal.Type = chanType
 		dbPortal.Insert()
+	}
+
+	if pkSession == nil {
+		pkSession = pkgo.New(br.Config.Bridge.PluralkitConfig.ApiKey)
 	}
 
 	portal := br.NewPortal(dbPortal)
@@ -671,7 +675,7 @@ func (portal *Portal) handleDiscordMessageCreate(user *User, msg *discordgo.Mess
 			lastThreadEvent = lastInThread.MXID
 		}
 	}
-	replyTo := portal.getReplyTarget(user, discordThreadID, msg.MessageReference, msg.Embeds, false)
+	replyTo := portal.getReplyTarget(user, discordThreadID, msg.Content, msg.MessageReference, msg.Embeds, false)
 	mentions := portal.convertDiscordMentions(msg, true)
 
 	ts, _ := discordgo.SnowflakeTimestamp(msg.ID)
@@ -738,7 +742,8 @@ func (portal *Portal) handleDiscordMessageCreateDelay(user *User, msg *discordgo
 }
 
 func getPkPuppetAndIntent(portal *Portal, user *User, msg *discordgo.Message) (*Puppet, *appservice.IntentAPI) {
-	if msg.ApplicationID == "466378653216014359" {
+	// PluralKit
+	if msg.ApplicationID == "466378653216014359" && pkSession != nil {
 		messageId, err := pkgo.ParseSnowflake(msg.ID)
 		if err != nil {
 			return getPuppetAndIntent(portal, user, msg)
@@ -753,16 +758,42 @@ func getPkPuppetAndIntent(portal *Portal, user *User, msg *discordgo.Message) (*
 		if senderPuppet.PluralState != "pk:user" {
 			senderPuppet.PluralState = "pk:user"
 			_, err := portal.sendMatrixMessage(portal.MainIntent(), event.EventMessage, &event.MessageEventContent{
-				Body:    fmt.Sprintf("User %s was automatically marked as a PluralKit user. Use the set-pk command to reverse this.", senderPuppet.Name),
+				Body:    fmt.Sprintf("User %s was automatically marked as a plural proxy user. Use the set-pk command to reverse this.", senderPuppet.Name),
 				MsgType: event.MsgNotice,
 			}, nil, time.Now().UnixMilli())
 			if err != nil {
-				log.Err(err).Msg("Failed to notify auto PluralKit setting")
+				log.Err(err).Msg("Failed to notify auto plural proxy setting")
 			}
 		}
 
 		puppet := portal.bridge.GetPuppetByID(msg.Author.ID)
-		puppet.UpdateInfoWithPluralKit(pkMessage.Member, pkMessage.System, msg)
+		puppet.UpdateInfoWithPluralKit(pkMessage.Member, pkMessage.System, pkMessage.Sender.String(), msg)
+		intent := puppet.IntentFor(portal)
+		return puppet, intent
+	}
+
+	// /plu/ral
+	if msg.ApplicationID == "1291501048493768784" && len(portal.bridge.Config.Bridge.PluRalConfig.ApiKey) > 0 {
+		prMessage, err := plural.GetPluRalMessageInfo(portal.bridge.Config.Bridge.PluRalConfig.ApiKey, msg.ChannelID, msg.ID)
+		if err != nil {
+			return getPuppetAndIntent(portal, user, msg)
+		}
+		msg.Author.ID = fmt.Sprintf("pr_%s", prMessage.Member.ID)
+		senderPuppet := portal.bridge.GetPuppetByID(prMessage.AuthorID)
+		portal.handleDiscordStopTyping(senderPuppet.ID)
+		if senderPuppet.PluralState != "pk:user" {
+			senderPuppet.PluralState = "pk:user"
+			_, err := portal.sendMatrixMessage(portal.MainIntent(), event.EventMessage, &event.MessageEventContent{
+				Body:    fmt.Sprintf("User %s was automatically marked as a plural proxy user. Use the set-pk command to reverse this.", senderPuppet.Name),
+				MsgType: event.MsgNotice,
+			}, nil, time.Now().UnixMilli())
+			if err != nil {
+				log.Err(err).Msg("Failed to notify auto plural proxy setting")
+			}
+		}
+
+		puppet := portal.bridge.GetPuppetByID(msg.Author.ID)
+		puppet.UpdateInfoWithPluRal(prMessage, prMessage.AuthorID, msg)
 		intent := puppet.IntentFor(portal)
 		return puppet, intent
 	}
@@ -778,12 +809,13 @@ func getPuppetAndIntent(portal *Portal, user *User, msg *discordgo.Message) (*Pu
 }
 
 var hackyReplyPattern = regexp.MustCompile(`^\*\*?\[(?:Reply(?:ing)? to:?|\(click to see attachment\))]\(https://discord.com/channels/(\d+)/(\d+)/(\d+)\)`)
+var HackyContenetReplyPattern = regexp.MustCompile(`^-# \[↪]\(<https://discord.com/channels/(\d+)/(\d+)/(\d+)>\).+\n?`)
 
 func isReplyEmbed(embed *discordgo.MessageEmbed) bool {
 	return hackyReplyPattern.MatchString(embed.Description)
 }
 
-func (portal *Portal) getReplyTarget(source *User, threadID string, ref *discordgo.MessageReference, embeds []*discordgo.MessageEmbed, allowNonExistent bool) *event.InReplyTo {
+func (portal *Portal) getReplyTarget(source *User, threadID string, content string, ref *discordgo.MessageReference, embeds []*discordgo.MessageEmbed, allowNonExistent bool) *event.InReplyTo {
 	if ref == nil && len(embeds) > 0 {
 		match := hackyReplyPattern.FindStringSubmatch(embeds[0].Description)
 		if match != nil && match[1] == portal.GuildID && (match[2] == portal.Key.ChannelID || match[2] == threadID) {
@@ -795,7 +827,16 @@ func (portal *Portal) getReplyTarget(source *User, threadID string, ref *discord
 		}
 	}
 	if ref == nil {
-		return nil
+		match := HackyContenetReplyPattern.FindStringSubmatch(content)
+		if match != nil && match[1] == portal.GuildID && (match[2] == portal.Key.ChannelID || match[2] == threadID) {
+			ref = &discordgo.MessageReference{
+				MessageID: match[3],
+				ChannelID: match[2],
+				GuildID:   match[1],
+			}
+		} else {
+			return nil
+		}
 	}
 	// TODO add config option for cross-room replies
 	crossRoomReplies := portal.bridge.Config.Homeserver.Software == bridgeconfig.SoftwareHungry

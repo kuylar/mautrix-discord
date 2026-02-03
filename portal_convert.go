@@ -304,6 +304,7 @@ func (portal *Portal) handleTenor(url string) *ConvertedMessage {
 
 func (portal *Portal) convertDiscordMessage(ctx context.Context, puppet *Puppet, intent *appservice.IntentAPI, msg *discordgo.Message) []*ConvertedMessage {
 	predictedLength := len(msg.Attachments) + len(msg.StickerItems)
+	msg.Content = HackyContenetReplyPattern.ReplaceAllString(msg.Content, "")
 	if msg.Content != "" {
 		predictedLength++
 	}

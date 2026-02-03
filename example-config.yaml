@@ -387,6 +387,33 @@ bridge:
         # If the user isn't proxying, their message will appear with n ms delay
         # This is done to avoid creating & redacting events for proxied messages
         message_delay: 5000
+        # PluralKit API key to have higher rate limits. Not required, but recommended
+        api_key: ''
+
+    # /plu/ral support & config
+    plu_ral:
+        # Localpart template of MXIDs for /plu/ral users.
+        # {{.}} is replaced with the internal /plu/ral member ID
+        username_template: discord_{{.}}
+        # Displayname template for /plu/ral users.
+        # Available variables:
+        #   .ID - /plu/ral member ID
+        #   .Name - Name of the member
+        #   .Pronouns - Pronouns of the member
+        #   .Bio - Bio/About me of the member
+        #   .Birthday - Birthday of the member
+        #   .Color - Color of the member
+        #   .AvatarURL - Avatar URL of the member
+        #   .Supporter - Is the member a /plu/ral supporter
+        #   .Private - Is the member private
+        displayname_template: '{{.Name}}{{if .Pronouns}} ({{.Pronouns}}){{end}} (PR)'
+        # Amount of milliseconds to delay the message of PK users.
+        # If the user is currently proxying, this shouldn't affect anything
+        # If the user isn't proxying, their message will appear with n ms delay
+        # This is done to avoid creating & redacting events for proxied messages
+        message_delay: 5000
+        # /plu/ral API key to get message info. Required for /plu/ral functionality
+        api_key: ""
 
     tenor_proxy: "tenor.kuylar.dev"
     enable_discord_presence_bridging: false

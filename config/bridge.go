@@ -23,6 +23,7 @@ import (
 	"text/template"
 
 	"github.com/starshine-sys/pkgo/v2"
+	"go.mau.fi/mautrix-discord/plural"
 
 	"github.com/bwmarrin/discordgo"
 
@@ -100,7 +101,14 @@ type BridgeConfig struct {
 		DisplaynameTemplate string `yaml:"displayname_template"`
 		UsernameTemplate    string `yaml:"username_template"`
 		MessageDelay        int    `yaml:"message_delay"`
+		ApiKey              string `yaml:"api_key"`
 	} `yaml:"pluralkit"`
+	PluRalConfig struct {
+		DisplaynameTemplate string `yaml:"displayname_template"`
+		UsernameTemplate    string `yaml:"username_template"`
+		MessageDelay        int    `yaml:"message_delay"`
+		ApiKey              string `yaml:"api_key"`
+	} `yaml:"plu_ral"`
 	TenorProxy                    string `yaml:"tenor_proxy"`
 	EnableDiscordPresenceBridging bool   `yaml:"enable_discord_presence_bridging"`
 
@@ -110,6 +118,8 @@ type BridgeConfig struct {
 	guildNameTemplate     *template.Template `yaml:"-"`
 	pkUsernameTemplate    *template.Template `yaml:"-"`
 	pkDisplaynameTemplate *template.Template `yaml:"-"`
+	prUsernameTemplate    *template.Template `yaml:"-"`
+	prDisplaynameTemplate *template.Template `yaml:"-"`
 }
 
 type DirectMedia struct {
@@ -187,6 +197,14 @@ func (bc *BridgeConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 	bc.pkDisplaynameTemplate, err = template.New("pk_displayname").Parse(bc.PluralkitConfig.DisplaynameTemplate)
+	if err != nil {
+		return err
+	}
+	bc.prUsernameTemplate, err = template.New("pr_username").Parse(bc.PluRalConfig.UsernameTemplate)
+	if err != nil {
+		return err
+	}
+	bc.prDisplaynameTemplate, err = template.New("pr_displayname").Parse(bc.PluRalConfig.DisplaynameTemplate)
 	if err != nil {
 		return err
 	}
@@ -279,5 +297,17 @@ func (bc BridgeConfig) FormatPluralKitDisplayname(member *pkgo.Member, system *p
 		SystemName: system.Name,
 		SystemTag:  system.Tag,
 	})
+	return buffer.String()
+}
+
+func (bc BridgeConfig) FormatPluRalUsername(userID string) string {
+	var buffer strings.Builder
+	_ = bc.prUsernameTemplate.Execute(&buffer, userID)
+	return buffer.String()
+}
+
+func (bc BridgeConfig) FormatPluRalDisplayname(member plural.PluRalMember) string {
+	var buffer strings.Builder
+	_ = bc.prDisplaynameTemplate.Execute(&buffer, member)
 	return buffer.String()
 }
