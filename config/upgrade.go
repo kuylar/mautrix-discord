@@ -127,6 +127,20 @@ func DoUpgrade(helper *up.Helper) {
 	}
 	helper.Copy(up.Bool, "bridge", "provisioning", "debug_endpoints")
 
+	helper.Copy(up.Str, "bridge", "pluralkit", "username_template")
+	helper.Copy(up.Str, "bridge", "pluralkit", "displayname_template")
+	helper.Copy(up.Int, "bridge", "pluralkit", "message_delay")
+	helper.Copy(up.Str, "bridge", "pluralkit", "api_key")
+
+	helper.Copy(up.Str, "bridge", "plu_ral", "username_template")
+	helper.Copy(up.Str, "bridge", "plu_ral", "displayname_template")
+	helper.Copy(up.Int, "bridge", "plu_ral", "message_delay")
+	helper.Copy(up.Str, "bridge", "plu_ral", "api_key")
+
+	helper.Copy(up.Str, "bridge", "tenor_proxy")
+	helper.Copy(up.Str, "bridge", "klipy_proxy")
+	helper.Copy(up.Bool, "bridge", "enable_discord_presence_bridging")
+
 	helper.Copy(up.Map, "bridge", "permissions")
 	//helper.Copy(up.Bool, "bridge", "relay", "enabled")
 	//helper.Copy(up.Bool, "bridge", "relay", "admin_only")
