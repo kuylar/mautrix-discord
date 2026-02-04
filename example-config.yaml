@@ -389,6 +389,7 @@ bridge:
         message_delay: 5000
 
     tenor_proxy: "tenor.kuylar.dev"
+    klipy_proxy: "mxc://sakurapush.kuylar.dev/klipy_%s"
     enable_discord_presence_bridging: false
 
 

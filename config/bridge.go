@@ -102,6 +102,7 @@ type BridgeConfig struct {
 		MessageDelay        int    `yaml:"message_delay"`
 	} `yaml:"pluralkit"`
 	TenorProxy                    string `yaml:"tenor_proxy"`
+	KlipyProxy                    string `yaml:"klipy_proxy"`
 	EnableDiscordPresenceBridging bool   `yaml:"enable_discord_presence_bridging"`
 
 	usernameTemplate      *template.Template `yaml:"-"`

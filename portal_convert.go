@@ -275,11 +275,14 @@ func (portal *Portal) convertDiscordVideoEmbed(ctx context.Context, intent *apps
 	}
 }
 
-var tenorGifPattern = regexp.MustCompile(`https://tenor\.com/view/.+?-(\d+)`)
+var tenorGifPattern = regexp.MustCompile(`https://tenor\.com/view/.+-(\d+)`)
 
 func (portal *Portal) handleTenor(url string) *ConvertedMessage {
 	attachmentID := fmt.Sprintf("gif_%s", url)
 	match := tenorGifPattern.FindStringSubmatch(url)
+	if len(match) == 0 {
+		return nil
+	}
 	mxc := fmt.Sprintf("mxc://%s/%s", portal.bridge.Config.Bridge.TenorProxy, match[1])
 	uri, _ := id.ParseContentURI(mxc)
 	content := &event.MessageEventContent{
@@ -302,6 +305,37 @@ func (portal *Portal) handleTenor(url string) *ConvertedMessage {
 	}
 }
 
+var klipyGifPattern = regexp.MustCompile(`https://klipy\.com/gifs/(.+)`)
+
+func (portal *Portal) handleKlipy(url string) *ConvertedMessage {
+	attachmentID := fmt.Sprintf("gif_%s", url)
+	match := klipyGifPattern.FindStringSubmatch(url)
+	if len(match) == 0 {
+		return nil
+	}
+	mxc := fmt.Sprintf(portal.bridge.Config.Bridge.KlipyProxy, match[1])
+	name := fmt.Sprintf("klipy_%s.gif", match[1])
+	uri, _ := id.ParseContentURI(mxc)
+	content := &event.MessageEventContent{
+		Body:     name,
+		URL:      uri.CUString(),
+		MsgType:  event.MsgImage,
+		FileName: name,
+		Info: &event.FileInfo{
+			MimeType: "image/gif",
+			Width:    256,
+			Height:   256,
+		},
+	}
+	extra := map[string]any{}
+	return &ConvertedMessage{
+		AttachmentID: attachmentID,
+		Type:         event.EventMessage,
+		Content:      content,
+		Extra:        extra,
+	}
+}
+
 func (portal *Portal) convertDiscordMessage(ctx context.Context, puppet *Puppet, intent *appservice.IntentAPI, msg *discordgo.Message) []*ConvertedMessage {
 	predictedLength := len(msg.Attachments) + len(msg.StickerItems)
 	if msg.Content != "" {
@@ -309,7 +343,16 @@ func (portal *Portal) convertDiscordMessage(ctx context.Context, puppet *Puppet,
 	}
 	parts := make([]*ConvertedMessage, 0, predictedLength)
 	if isPlainGifMessage(msg) {
-		if textPart := portal.handleTenor(msg.Content); textPart != nil {
+		tenor := portal.handleTenor(msg.Content)
+		klipy := portal.handleKlipy(msg.Content)
+		var textPart *ConvertedMessage
+		if tenor != nil {
+			textPart = tenor
+		}
+		if klipy != nil {
+			textPart = klipy
+		}
+		if textPart != nil {
 			parts = append(parts, textPart)
 		}
 	} else {
@@ -350,6 +393,10 @@ func (portal *Portal) convertDiscordMessage(ctx context.Context, puppet *Puppet,
 		}
 		// Ignore Tenor GIFs, those are handled above
 		if tenorGifPattern.MatchString(embed.URL) {
+			continue
+		}
+		// Ignore Klipy GIFs, those are handled above
+		if klipyGifPattern.MatchString(embed.URL) {
 			continue
 		}
 		handledIDs[embed.URL] = struct{}{}

@@ -979,7 +979,14 @@ func (portal *Portal) handleDiscordMessageUpdate(user *User, msg *discordgo.Mess
 	// Slightly hacky special case: messages with gif links will get an embed with the gif.
 	// The link isn't rendered on Discord, so just edit the link message into a gif message on Matrix too.
 	if isPlainGifMessage(msg) {
-		converted = portal.handleTenor(msg.Embeds[0].URL)
+		tenor := portal.handleTenor(msg.Content)
+		klipy := portal.handleKlipy(msg.Content)
+		if tenor != nil {
+			converted = tenor
+		}
+		if klipy != nil {
+			converted = klipy
+		}
 	} else {
 		converted = portal.convertDiscordTextMessage(ctx, intent, msg)
 	}
