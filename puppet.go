@@ -243,8 +243,8 @@ func (puppet *Puppet) UpdateNameWithPluralKit(member *pkgo.Member, system *pkgo.
 	return true
 }
 
-func (puppet *Puppet) UpdateNameWithPluRal(member *plural.PluRalMember) bool {
-	newName := puppet.bridge.Config.Bridge.FormatPluRalDisplayname(*member)
+func (puppet *Puppet) UpdateNameWithPluRal(member *plural.PluRalMember, tmpSysTag string) bool {
+	newName := puppet.bridge.Config.Bridge.FormatPluRalDisplayname(*member, tmpSysTag)
 	if puppet.Name == newName && puppet.NameSet {
 		return false
 	}
@@ -517,7 +517,7 @@ func (puppet *Puppet) UpdateInfoWithPluralKit(member *pkgo.Member, system *pkgo.
 	}
 }
 
-func (puppet *Puppet) UpdateInfoWithPluRal(message *plural.PluRalMessage, ogUser string, ogMessage *discordgo.Message) {
+func (puppet *Puppet) UpdateInfoWithPluRal(message *plural.PluRalMessage, ogUser string, tmpSysTag string, ogMessage *discordgo.Message) {
 	puppet.syncLock.Lock()
 	defer puppet.syncLock.Unlock()
 
@@ -546,7 +546,7 @@ func (puppet *Puppet) UpdateInfoWithPluRal(message *plural.PluRalMessage, ogUser
 		}
 	}
 	changed = puppet.UpdateContactInfoWithPluRal(&message.Member) || changed
-	changed = puppet.UpdateNameWithPluRal(&message.Member) || changed
+	changed = puppet.UpdateNameWithPluRal(&message.Member, tmpSysTag) || changed
 	changed = puppet.UpdateAvatarWithPluRal(&message.Member) || changed
 	if changed {
 		puppet.Update()

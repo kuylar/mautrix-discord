@@ -306,8 +306,16 @@ func (bc BridgeConfig) FormatPluRalUsername(userID string) string {
 	return buffer.String()
 }
 
-func (bc BridgeConfig) FormatPluRalDisplayname(member plural.PluRalMember) string {
+type PluRalDisplaynameParams struct {
+	*plural.PluRalMember
+	SystemTag string
+}
+
+func (bc BridgeConfig) FormatPluRalDisplayname(member plural.PluRalMember, tmpSysTag string) string {
 	var buffer strings.Builder
-	_ = bc.prDisplaynameTemplate.Execute(&buffer, member)
+	_ = bc.prDisplaynameTemplate.Execute(&buffer, &PluRalDisplaynameParams{
+		&member,
+		tmpSysTag,
+	})
 	return buffer.String()
 }

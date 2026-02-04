@@ -773,7 +773,11 @@ func getPkPuppetAndIntent(portal *Portal, user *User, msg *discordgo.Message) (*
 	}
 
 	// /plu/ral
-	if msg.ApplicationID == "1291501048493768784" && len(portal.bridge.Config.Bridge.PluRalConfig.ApiKey) > 0 {
+	if msg.ApplicationID == "1291501048493768784" {
+		if len(portal.bridge.Config.Bridge.PluRalConfig.ApiKey) == 0 {
+			log.Warn().Msg("/plu/ral API key is not set!")
+			return getPuppetAndIntent(portal, user, msg)
+		}
 		prMessage, err := plural.GetPluRalMessageInfo(portal.bridge.Config.Bridge.PluRalConfig.ApiKey, msg.ChannelID, msg.ID)
 		if err != nil {
 			return getPuppetAndIntent(portal, user, msg)
@@ -793,7 +797,7 @@ func getPkPuppetAndIntent(portal *Portal, user *User, msg *discordgo.Message) (*
 		}
 
 		puppet := portal.bridge.GetPuppetByID(msg.Author.ID)
-		puppet.UpdateInfoWithPluRal(prMessage, prMessage.AuthorID, msg)
+		puppet.UpdateInfoWithPluRal(prMessage, prMessage.AuthorID, senderPuppet.Username, msg)
 		intent := puppet.IntentFor(portal)
 		return puppet, intent
 	}
